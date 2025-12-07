@@ -44,6 +44,24 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
         }
+        Commands::Status { playlist } => {
+            cli::commands::staging::status(
+                playlist.as_deref().or(cli.playlist.as_deref()),
+                &plr_dir,
+            )
+            .await?;
+        }
+        Commands::Reset { playlist } => {
+            cli::commands::staging::reset(
+                playlist.as_deref().or(cli.playlist.as_deref()),
+                &plr_dir,
+            )
+            .await?;
+        }
+        Commands::List { playlist } => {
+            cli::commands::misc::list(playlist.as_deref().or(cli.playlist.as_deref()), &plr_dir)
+                .await?;
+        }
         /* Commands::Commit { message } => {
             cli::commands::staging::commit(&message, cli.playlist.as_deref(), &plr_dir).await?;
         } */

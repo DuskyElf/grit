@@ -37,7 +37,11 @@ pub enum Commands {
     /// Push local changes to remote
     Push,
     /// Show sync status
-    Status,
+    Status {
+        /// Playlist ID or use --playlist
+        #[arg(short = 'l', long)]
+        playlist: Option<String>,
+    },
     /// Show change history
     Log,
     /// Apply a playlist state from file
@@ -83,5 +87,18 @@ pub enum Commands {
         /// Show only remote changes
         #[arg(long)]
         remote: bool,
+    },
+
+    /// Clear staged changes
+    Reset {
+        /// Playlist ID or use --playlist
+        #[arg(short = 'l', long)]
+        playlist: Option<String>,
+    },
+    /// List tracks in local playlist
+    List {
+        /// Playlist ID or use --playlist
+        #[arg(short = 'l', long)]
+        playlist: Option<String>,
     },
 }

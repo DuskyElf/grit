@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::{
     provider::{Provider, ProviderKind, SpotifyProvider, TrackChange, YoutubeProvider},
-    state::{credentials, snapshot, stage_change},
+    state::{clear_staged, credentials, load_staged, snapshot, stage_change},
 };
 
 fn create_provider(provider_kind: ProviderKind, plr_dir: &Path) -> Result<Box<dyn Provider>> {
@@ -29,6 +29,66 @@ fn create_provider(provider_kind: ProviderKind, plr_dir: &Path) -> Result<Box<dy
         }
     };
     Ok(provider)
+}
+
+pub async fn status(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+    let playlist_id = playlist.context("Playlist required (use --playlist)")?;
+
+    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    if !snapshot_path.exists() {
+        bail!("Playlist not initialized. Run 'plr init' first.");
+    }
+
+    let snapshot = snapshot::load(&snapshot_path)?;
+    let patch = load_staged(plr_dir, playlist_id)?;
+
+    println!("\n[Staged Changes]");
+    if patch.changes.is_empty() {
+        println!("  No staged changes");
+    } else {
+        let mut added = 0;
+        let mut removed = 0;
+        let mut moved = 0;
+
+        for change in &patch.changes {
+            match change {
+                crate::provider::TrackChange::Added { track, index } => {
+                    added += 1;
+                    println!(
+                        "  + [{}] {} - {}",
+                        index,
+                        track.name,
+                        track.artists.join(", ")
+                    );
+                }
+                crate::provider::TrackChange::Removed { track, index } => {
+                    removed += 1;
+                    println!(
+                        "  - [{}] {} - {}",
+                        index,
+                        track.name,
+                        track.artists.join(", ")
+                    );
+                }
+                crate::provider::TrackChange::Moved { track, from, to } => {
+                    moved += 1;
+                    println!(
+                        "  ~ {} - {} (from {} to {})",
+                        track.name,
+                        track.artists.join(", "),
+                        from,
+                        to
+                    );
+                }
+            }
+        }
+
+        println!("\n  Summary: +{} -{} ~{}", added, removed, moved);
+        println!("\nUse 'plr commit -m \"message\"' to commit these changes");
+        println!("Use 'plr reset' to discard staged changes");
+    }
+
+    Ok(())
 }
 
 pub async fn search(query: &str, provider: Option<ProviderKind>, plr_dir: &Path) -> Result<()> {
@@ -175,6 +235,28 @@ pub async fn move_track(
     println!("  From: {} → To: {}", from_index, new_index);
     println!("\nUse 'plr status' to see all staged changes");
     println!("Use 'plr commit -m \"message\"' to commit");
+
+    Ok(())
+}
+
+pub async fn reset(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+    let playlist_id = playlist.context("Playlist required (use --playlist)")?;
+
+    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    if !snapshot_path.exists() {
+        bail!("Playlist not initialized. Run 'plr init' first.");
+    }
+
+    let patch = load_staged(plr_dir, playlist_id)?;
+    if patch.changes.is_empty() {
+        println!("No staged changes to reset.");
+        return Ok(());
+    }
+
+    clear_staged(plr_dir, playlist_id)?;
+
+    println!("Staged changes cleared.");
+    println!("  {} operations discarded", patch.changes.len());
 
     Ok(())
 }
