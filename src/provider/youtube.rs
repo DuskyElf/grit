@@ -229,7 +229,7 @@ impl YoutubeProvider {
 
         loop {
             let mut url = format!(
-                "{}/playlistItems?part=contentDetails&playlistId={}&maxResults=50",
+                "{}/playlistItems?part=snippet,contentDetails&playlistId={}&maxResults=50",
                 API_BASE, playlist_id
             );
 
@@ -372,7 +372,7 @@ impl Provider for YoutubeProvider {
 
             if !video_ids.is_empty() {
                 let videos_url = format!(
-                    "{}/videos?part=contentDetails&id={}",
+                    "{}/videos?part=snippet,contentDetails&id={}",
                     API_BASE,
                     video_ids.join(",")
                 );
