@@ -83,7 +83,7 @@ fn wait_for_callback(expected_state: &str) -> Result<String> {
     let listener = TcpListener::bind("127.0.0.1:8888")
         .context("Failed to bind to port 8888. Is another instance running?")?;
 
-    println!("Waiting for Spotify callback...");
+    println!("Waiting for callback...");
 
     for stream in listener.incoming() {
         let mut stream = stream?;
