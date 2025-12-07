@@ -61,8 +61,8 @@ pub async fn push(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
         added, removed, moved
     );
 
-    // Apply patch to remote
-    provider.apply(playlist_id, &patch).await?;
+    // Apply patch to remote to match local snapshot
+    provider.apply(playlist_id, &patch, &local_snapshot).await?;
 
     // Record in journal
     let hash = snapshot::compute_hash(&local_snapshot)?;

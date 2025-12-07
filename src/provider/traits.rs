@@ -9,8 +9,13 @@ pub trait Provider: Send + Sync {
     /// Fetch playlist snapshot from remote
     async fn fetch(&self, playlist_id: &str) -> anyhow::Result<PlaylistSnapshot>;
 
-    /// Apply changes to remote playlist
-    async fn apply(&self, playlist_id: &str, patch: &DiffPatch) -> anyhow::Result<()>;
+    /// Apply changes to remote playlist to match desired state
+    async fn apply(
+        &self,
+        playlist_id: &str,
+        patch: &DiffPatch,
+        desired_state: &PlaylistSnapshot,
+    ) -> anyhow::Result<()>;
 
     /// Get playable URL for a track
     async fn playable_url(&self, track: &Track) -> anyhow::Result<String>;

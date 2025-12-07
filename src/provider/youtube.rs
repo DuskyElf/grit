@@ -415,9 +415,15 @@ impl Provider for YoutubeProvider {
         })
     }
 
-    async fn apply(&self, playlist_id: &str, patch: &DiffPatch) -> Result<()> {
+    async fn apply(
+        &self,
+        playlist_id: &str,
+        patch: &DiffPatch,
+        desired_state: &PlaylistSnapshot,
+    ) -> Result<()> {
         let token = self.get_token().await?;
 
+        // Step 1: Remove tracks that shouldn't be there
         let playlist_items = self.fetch_playlist_item_ids(playlist_id, &token).await?;
 
         for change in &patch.changes {
@@ -436,16 +442,17 @@ impl Provider for YoutubeProvider {
             }
         }
 
+        // Step 2: Add new tracks to the END (we'll reorder later)
         for change in &patch.changes {
-            if let TrackChange::Added { track, index } = change {
+            if let TrackChange::Added { track, .. } = change {
                 let body = serde_json::json!({
                     "snippet": {
                         "playlistId": playlist_id,
                         "resourceId": {
                             "kind": "youtube#video",
                             "videoId": track.id
-                        },
-                        "position": index
+                        }
+                        // No position - adds to end
                     }
                 });
 
@@ -459,29 +466,42 @@ impl Provider for YoutubeProvider {
             }
         }
 
-        for change in &patch.changes {
-            if let TrackChange::Moved { track, to, .. } = change {
-                if let Some((item_id, _)) = playlist_items.iter().find(|(_, vid)| vid == &track.id)
-                {
-                    let body = serde_json::json!({
-                        "id": item_id,
-                        "snippet": {
-                            "playlistId": playlist_id,
-                            "resourceId": {
-                                "kind": "youtube#video",
-                                "videoId": track.id
-                            },
-                            "position": to
-                        }
-                    });
+        // Step 3: Reorder playlist to match desired state
+        // Process from the beginning, moving each track to its correct position
+        for (desired_idx, desired_track) in desired_state.tracks.iter().enumerate() {
+            // Fetch current state to find where this track is now and get its item_id
+            let current = self.fetch(playlist_id).await?;
+            let playlist_items = self.fetch_playlist_item_ids(playlist_id, &token).await?;
 
-                    self.http
-                        .put(format!("{}/playlistItems?part=snippet", API_BASE))
-                        .header("Authorization", format!("Bearer {}", token))
-                        .json(&body)
-                        .send()
-                        .await?
-                        .error_for_status()?;
+            let current_idx = current.tracks.iter().position(|t| t.id == desired_track.id);
+
+            if let Some(current_idx) = current_idx {
+                if current_idx != desired_idx {
+                    // Find the item_id for this track
+                    if let Some((item_id, _)) = playlist_items
+                        .iter()
+                        .find(|(_, vid)| vid == &desired_track.id)
+                    {
+                        let body = serde_json::json!({
+                            "id": item_id,
+                            "snippet": {
+                                "playlistId": playlist_id,
+                                "resourceId": {
+                                    "kind": "youtube#video",
+                                    "videoId": desired_track.id
+                                },
+                                "position": desired_idx
+                            }
+                        });
+
+                        self.http
+                            .put(format!("{}/playlistItems?part=snippet", API_BASE))
+                            .header("Authorization", format!("Bearer {}", token))
+                            .json(&body)
+                            .send()
+                            .await?
+                            .error_for_status()?;
+                    }
                 }
             }
         }

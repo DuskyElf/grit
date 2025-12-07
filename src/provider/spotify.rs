@@ -318,10 +318,15 @@ impl Provider for SpotifyProvider {
         })
     }
 
-    async fn apply(&self, playlist_id: &str, patch: &DiffPatch) -> Result<()> {
+    async fn apply(
+        &self,
+        playlist_id: &str,
+        patch: &DiffPatch,
+        desired_state: &PlaylistSnapshot,
+    ) -> Result<()> {
         let token = self.get_token().await?;
 
-        // Process removals first to prevent index shifting issues
+        // Step 1: Remove tracks that shouldn't be there
         for change in &patch.changes {
             if let TrackChange::Removed { track, .. } = change {
                 let uri = format!("spotify:track:{}", track.id);
@@ -341,12 +346,13 @@ impl Provider for SpotifyProvider {
             }
         }
 
+        // Step 2: Add new tracks to the END (we'll reorder later)
         for change in &patch.changes {
-            if let TrackChange::Added { track, index } = change {
+            if let TrackChange::Added { track, .. } = change {
                 let uri = format!("spotify:track:{}", track.id);
                 let body = serde_json::json!({
-                    "uris": [uri],
-                    "position": index
+                    "uris": [uri]
+                    // No position - adds to end
                 });
 
                 self.http
@@ -359,23 +365,39 @@ impl Provider for SpotifyProvider {
             }
         }
 
-        for change in &patch.changes {
-            if let TrackChange::Moved { from, to, .. } = change {
-                let insert_before = if from < to { to + 1 } else { *to };
+        // Step 3: Reorder playlist to match desired state
+        // After removals and additions, reorder tracks to match desired order
+        // We process from the beginning, moving each track to its correct position
 
-                let body = serde_json::json!({
-                    "range_start": from,
-                    "insert_before": insert_before,
-                    "range_length": 1
-                });
+        for (desired_idx, desired_track) in desired_state.tracks.iter().enumerate() {
+            // Fetch current state to find where this track is now
+            let current = self.fetch(playlist_id).await?;
 
-                self.http
-                    .put(format!("{}/playlists/{}/tracks", API_BASE, playlist_id))
-                    .header("Authorization", format!("Bearer {}", token))
-                    .json(&body)
-                    .send()
-                    .await?
-                    .error_for_status()?;
+            let current_idx = current.tracks.iter().position(|t| t.id == desired_track.id);
+
+            if let Some(current_idx) = current_idx {
+                if current_idx != desired_idx {
+                    // Need to move this track to its correct position
+                    let insert_before = if current_idx < desired_idx {
+                        desired_idx + 1
+                    } else {
+                        desired_idx
+                    };
+
+                    let body = serde_json::json!({
+                        "range_start": current_idx,
+                        "insert_before": insert_before,
+                        "range_length": 1
+                    });
+
+                    self.http
+                        .put(format!("{}/playlists/{}/tracks", API_BASE, playlist_id))
+                        .header("Authorization", format!("Bearer {}", token))
+                        .json(&body)
+                        .send()
+                        .await?
+                        .error_for_status()?;
+                }
             }
         }
 
