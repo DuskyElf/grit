@@ -1,17 +1,27 @@
-mod provider;
 mod cli;
+mod provider;
 mod state;
 
 use clap::Parser;
-use cli::Cli;
+use cli::{Cli, Commands};
+use std::path::PathBuf;
 
-fn main() {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Load .env file if present (ignores if missing)
+    let _ = dotenvy::dotenv();
+
     let cli = Cli::parse();
+    let plr_dir = PathBuf::from(".plr");
 
-    if cli.verbose {
-        println!("Verbose mode enabled");
+    match cli.command {
+        Commands::Auth { provider } => {
+            cli::commands::auth::run(provider, &plr_dir).await?;
+        }
+        _ => {
+            println!("{:?}", cli.command);
+        }
     }
 
-    println!("{:?}", cli.command);
+    Ok(())
 }
-

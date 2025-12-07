@@ -1,6 +1,7 @@
+pub mod spotify;
 mod traits;
 mod types;
-mod spotify;
 
+pub use spotify::SpotifyProvider;
 pub use traits::Provider;
 pub use types::*;
