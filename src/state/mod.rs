@@ -6,6 +6,6 @@ pub mod snapshot;
 pub mod staging;
 
 pub use config::Config;
-pub use diff::diff;
+pub use diff::{apply_patch, diff};
 pub use journal::{JournalEntry, Operation};
 pub use staging::*;
