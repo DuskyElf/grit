@@ -61,6 +61,7 @@ struct YoutubePlaylistItemsResponse {
 
 #[derive(Deserialize)]
 struct YoutubePlaylistItem {
+    id: String,
     snippet: YoutubeItemSnippet,
     #[serde(rename = "contentDetails")]
     content_details: YoutubeItemContentDetails,
@@ -210,6 +211,35 @@ impl YoutubeProvider {
             .context("Failed to parse API response")
     }
 
+    async fn fetch_playlist_item_ids(&self, playlist_id: &str, token: &str) -> Result<Vec<(String, String)>> {
+        let mut items = Vec::new();
+        let mut page_token: Option<String> = None;
+
+        loop {
+            let mut url = format!(
+                "{}/playlistItems?part=contentDetails&playlistId={}&maxResults=50",
+                API_BASE, playlist_id
+            );
+
+            if let Some(token_str) = &page_token {
+                url.push_str(&format!("&pageToken={}", token_str));
+            }
+
+            let resp: YoutubePlaylistItemsResponse = self.api_get(&url, token).await?;
+
+            for item in resp.items {
+                items.push((item.id, item.content_details.video_id));
+            }
+
+            page_token = resp.next_page_token;
+            if page_token.is_none() {
+                break;
+            }
+        }
+
+        Ok(items)
+    }
+
     fn parse_iso8601_duration(duration: &str) -> u64 {
         // Parse ISO 8601 duration format (PT1H2M3S) to milliseconds
         let duration = duration.trim_start_matches("PT");
@@ -243,18 +273,14 @@ impl Provider for YoutubeProvider {
     }
 
     fn oauth_url(&self, redirect_uri: &str, state: &str) -> String {
-        let scopes = [
-            "https://www.googleapis.com/auth/youtube.readonly",
-            "https://www.googleapis.com/auth/youtube",
-        ]
-        .join(" ");
+        let scopes = "https://www.googleapis.com/auth/youtube.force-ssl";
 
         format!(
             "{}?client_id={}&redirect_uri={}&response_type=code&scope={}&state={}&access_type=offline&prompt=consent",
             AUTH_URL,
             urlencoding::encode(&self.client_id),
             urlencoding::encode(redirect_uri),
-            urlencoding::encode(&scopes),
+            urlencoding::encode(scopes),
             urlencoding::encode(state),
         )
     }
@@ -380,8 +406,76 @@ impl Provider for YoutubeProvider {
         })
     }
 
-    async fn apply(&self, _playlist_id: &str, _patch: &DiffPatch) -> Result<()> {
-        anyhow::bail!("YouTube playlist modification not yet implemented")
+    async fn apply(&self, playlist_id: &str, patch: &DiffPatch) -> Result<()> {
+        let token = self.get_token().await?;
+
+        let playlist_items = self.fetch_playlist_item_ids(playlist_id, &token).await?;
+
+        for change in &patch.changes {
+            if let TrackChange::Removed { track, .. } = change {
+                if let Some((item_id, _)) = playlist_items.iter().find(|(_, vid)| vid == &track.id) {
+                    let url = format!("{}/playlistItems?id={}", API_BASE, item_id);
+
+                    self.http
+                        .delete(&url)
+                        .header("Authorization", format!("Bearer {}", token))
+                        .send()
+                        .await?
+                        .error_for_status()?;
+                }
+            }
+        }
+
+        for change in &patch.changes {
+            if let TrackChange::Added { track, index } = change {
+                let body = serde_json::json!({
+                    "snippet": {
+                        "playlistId": playlist_id,
+                        "resourceId": {
+                            "kind": "youtube#video",
+                            "videoId": track.id
+                        },
+                        "position": index
+                    }
+                });
+
+                self.http
+                    .post(format!("{}/playlistItems?part=snippet", API_BASE))
+                    .header("Authorization", format!("Bearer {}", token))
+                    .json(&body)
+                    .send()
+                    .await?
+                    .error_for_status()?;
+            }
+        }
+
+        for change in &patch.changes {
+            if let TrackChange::Moved { track, to, .. } = change {
+                if let Some((item_id, _)) = playlist_items.iter().find(|(_, vid)| vid == &track.id) {
+                    let body = serde_json::json!({
+                        "id": item_id,
+                        "snippet": {
+                            "playlistId": playlist_id,
+                            "resourceId": {
+                                "kind": "youtube#video",
+                                "videoId": track.id
+                            },
+                            "position": to
+                        }
+                    });
+
+                    self.http
+                        .put(format!("{}/playlistItems?part=snippet", API_BASE))
+                        .header("Authorization", format!("Bearer {}", token))
+                        .json(&body)
+                        .send()
+                        .await?
+                        .error_for_status()?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn playable_url(&self, track: &Track) -> Result<String> {
