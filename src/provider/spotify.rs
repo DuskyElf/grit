@@ -10,6 +10,7 @@ const API_BASE: &str = "https://api.spotify.com/v1";
 pub struct SpotifyProvider {
     client_id: String,
     client_secret: String,
+    access_token: Option<String>,
     http: reqwest::Client,
 }
 
@@ -79,8 +80,20 @@ impl SpotifyProvider {
         Self {
             client_id,
             client_secret,
+            access_token: None,
             http: reqwest::Client::new(),
         }
+    }
+
+    pub fn with_token(mut self, token: &OAuthToken) -> Self {
+        self.access_token = Some(token.access_token.clone());
+        self
+    }
+
+    fn get_token(&self) -> Result<&str> {
+        self.access_token
+            .as_deref()
+            .context("Not authenticated with Spotify")
     }
 
     fn basic_auth_header(&self) -> String {
@@ -193,8 +206,56 @@ impl Provider for SpotifyProvider {
         Ok(new_token)
     }
 
-    async fn fetch(&self, _playlist_id: &str) -> Result<PlaylistSnapshot> {
-        todo!("Implement fetch")
+    async fn fetch(&self, playlist_id: &str) -> Result<PlaylistSnapshot> {
+        let token = self.get_token()?;
+        let url = format!("{}/playlists/{}", API_BASE, playlist_id);
+
+        let playlist: SpotifyPlaylist = self.api_get(&url, token).await?;
+
+        let mut all_tracks = Vec::new();
+
+        for item in playlist.tracks.items {
+            if let Some(track) = item.track {
+                all_tracks.push(Track {
+                    id: track.id,
+                    name: track.name,
+                    artists: track.artists.into_iter().map(|a| a.name).collect(),
+                    duration_ms: track.duration_ms,
+                    provider: ProviderKind::Spotify,
+                    metadata: None,
+                });
+            }
+        }
+
+        let mut next_url = playlist.tracks.next;
+        while let Some(url) = next_url {
+            let page: SpotifyTracks = self.api_get(&url, token).await?;
+
+            for item in page.items {
+                if let Some(track) = item.track {
+                    all_tracks.push(Track {
+                        id: track.id,
+                        name: track.name,
+                        artists: track.artists.into_iter().map(|a| a.name).collect(),
+                        duration_ms: track.duration_ms,
+                        provider: ProviderKind::Spotify,
+                        metadata: None,
+                    });
+                }
+            }
+
+            next_url = page.next;
+        }
+
+        Ok(PlaylistSnapshot {
+            id: playlist.id,
+            name: playlist.name,
+            description: playlist.description,
+            tracks: all_tracks,
+            provider: ProviderKind::Spotify,
+            snapshot_hash: playlist.snapshot_id,
+            metadata: None,
+        })
     }
 
     async fn apply(&self, _playlist_id: &str, _patch: &DiffPatch) -> Result<()> {
