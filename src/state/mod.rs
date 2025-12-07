@@ -1,5 +1,6 @@
 mod config;
-mod snapshot;
+mod credentials;
 mod journal;
+mod snapshot;
 
 pub use config::Config;
