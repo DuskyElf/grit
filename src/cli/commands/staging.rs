@@ -17,18 +17,19 @@ pub async fn status(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
         bail!("Playlist not initialized. Run 'plr init' first.");
     }
 
-    let snapshot = snapshot::load(&snapshot_path)?;
-    let patch = load_staged(plr_dir, playlist_id)?;
+    let local_snapshot = snapshot::load(&snapshot_path)?;
+    let staged_patch = load_staged(plr_dir, playlist_id)?;
 
+    // Display staged changes
     println!("\n[Staged Changes]");
-    if patch.changes.is_empty() {
+    if staged_patch.changes.is_empty() {
         println!("  No staged changes");
     } else {
         let mut added = 0;
         let mut removed = 0;
         let mut moved = 0;
 
-        for change in &patch.changes {
+        for change in &staged_patch.changes {
             match change {
                 crate::provider::TrackChange::Added { track, index } => {
                     added += 1;
@@ -65,6 +66,48 @@ pub async fn status(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
         println!("\nUse 'plr commit -m \"message\"' to commit these changes");
         println!("Use 'plr reset' to discard staged changes");
     }
+
+    // Compare local vs remote
+    println!("\n[Local vs Remote]");
+    let provider = create_provider(local_snapshot.provider, plr_dir)?;
+
+    match provider.fetch(playlist_id).await {
+        std::result::Result::Ok(remote_snapshot) => {
+            use crate::state::diff;
+            let local_vs_remote = diff(&remote_snapshot, &local_snapshot);
+
+            if local_vs_remote.changes.is_empty() {
+                println!("  Local and remote are in sync");
+            } else {
+                let mut added = 0;
+                let mut removed = 0;
+                let mut moved = 0;
+
+                for change in &local_vs_remote.changes {
+                    match change {
+                        crate::provider::TrackChange::Added { .. } => added += 1,
+                        crate::provider::TrackChange::Removed { .. } => removed += 1,
+                        crate::provider::TrackChange::Moved { .. } => moved += 1,
+                    }
+                }
+
+                println!(
+                    "  Your local branch is ahead by {} change(s): +{} -{} ~{}",
+                    local_vs_remote.changes.len(),
+                    added,
+                    removed,
+                    moved
+                );
+                println!("\n  Use 'plr push' to sync with remote");
+            }
+        }
+        Err(e) => {
+            println!("  Could not fetch remote: {}", e);
+            println!("  (Local changes can still be committed)");
+        }
+    }
+
+    println!();
 
     Ok(())
 }
