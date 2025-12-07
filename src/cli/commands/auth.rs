@@ -47,6 +47,38 @@ async fn auth_spotify(plr_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+async fn auth_youtube(plr_dir: &Path) -> Result<()> {
+    let client_id =
+        std::env::var("YOUTUBE_CLIENT_ID").context("Set YOUTUBE_CLIENT_ID environment variable")?;
+    let client_secret = std::env::var("YOUTUBE_CLIENT_SECRET")
+        .context("Set YOUTUBE_CLIENT_SECRET environment variable")?;
+
+    let provider = YoutubeProvider::new(client_id, client_secret);
+
+    let state = format!("{:016x}", rand::random::<u64>());
+    let auth_url = provider.oauth_url(REDIRECT_URI, &state);
+
+    println!("Opening browser for YouTube authorization...\n");
+    println!("If it doesn't open, visit:\n{}\n", auth_url);
+
+    let _ = open::that(auth_url.clone());
+
+    let code = wait_for_callback(&state)?;
+
+    println!("Exchanging code for token...");
+    let token = provider.exchange_code(&code, REDIRECT_URI).await?;
+
+    credentials::save(plr_dir, ProviderKind::Youtube, &token)?;
+
+    println!("\nSuccessfully authenticated with YouTube!");
+    println!(
+        "  Token saved to {:?}",
+        plr_dir.join("credentials/youtube.json")
+    );
+
+    Ok(())
+}
+
 fn wait_for_callback(expected_state: &str) -> Result<String> {
     let listener = TcpListener::bind("127.0.0.1:8888")
         .context("Failed to bind to port 8888. Is another instance running?")?;
