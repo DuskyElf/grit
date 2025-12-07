@@ -211,7 +211,11 @@ impl YoutubeProvider {
             .context("Failed to parse API response")
     }
 
-    async fn fetch_playlist_item_ids(&self, playlist_id: &str, token: &str) -> Result<Vec<(String, String)>> {
+    async fn fetch_playlist_item_ids(
+        &self,
+        playlist_id: &str,
+        token: &str,
+    ) -> Result<Vec<(String, String)>> {
         let mut items = Vec::new();
         let mut page_token: Option<String> = None;
 
@@ -329,8 +333,7 @@ impl Provider for YoutubeProvider {
             API_BASE, playlist_id, self.client_id
         );
 
-        let playlist_resp: YoutubePlaylistResponse =
-            self.api_get(&playlist_url, &token).await?;
+        let playlist_resp: YoutubePlaylistResponse = self.api_get(&playlist_url, &token).await?;
 
         let playlist = playlist_resp
             .items
@@ -351,8 +354,7 @@ impl Provider for YoutubeProvider {
                 items_url.push_str(&format!("&pageToken={}", token));
             }
 
-            let items_resp: YoutubePlaylistItemsResponse =
-                self.api_get(&items_url, &token).await?;
+            let items_resp: YoutubePlaylistItemsResponse = self.api_get(&items_url, &token).await?;
 
             let video_ids: Vec<String> = items_resp
                 .items
@@ -367,8 +369,7 @@ impl Provider for YoutubeProvider {
                     video_ids.join(",")
                 );
 
-                let videos_resp: YoutubeVideoResponse =
-                    self.api_get(&videos_url, &token).await?;
+                let videos_resp: YoutubeVideoResponse = self.api_get(&videos_url, &token).await?;
 
                 for (item, video) in items_resp.items.iter().zip(videos_resp.items.iter()) {
                     let duration_ms = Self::parse_iso8601_duration(&video.content_details.duration);
@@ -413,7 +414,8 @@ impl Provider for YoutubeProvider {
 
         for change in &patch.changes {
             if let TrackChange::Removed { track, .. } = change {
-                if let Some((item_id, _)) = playlist_items.iter().find(|(_, vid)| vid == &track.id) {
+                if let Some((item_id, _)) = playlist_items.iter().find(|(_, vid)| vid == &track.id)
+                {
                     let url = format!("{}/playlistItems?id={}", API_BASE, item_id);
 
                     self.http
@@ -451,7 +453,8 @@ impl Provider for YoutubeProvider {
 
         for change in &patch.changes {
             if let TrackChange::Moved { track, to, .. } = change {
-                if let Some((item_id, _)) = playlist_items.iter().find(|(_, vid)| vid == &track.id) {
+                if let Some((item_id, _)) = playlist_items.iter().find(|(_, vid)| vid == &track.id)
+                {
                     let body = serde_json::json!({
                         "id": item_id,
                         "snippet": {
@@ -509,7 +512,11 @@ impl Provider for YoutubeProvider {
 
         let resp: SearchResponse = self.api_get(&url, &token).await?;
 
-        let video_ids: Vec<String> = resp.items.iter().map(|item| item.id.video_id.clone()).collect();
+        let video_ids: Vec<String> = resp
+            .items
+            .iter()
+            .map(|item| item.id.video_id.clone())
+            .collect();
 
         if video_ids.is_empty() {
             return Ok(Vec::new());
@@ -547,5 +554,15 @@ impl Provider for YoutubeProvider {
             .collect();
 
         Ok(tracks)
+    }
+
+    async fn can_modify_playlist(&self, playlist_id: &str) -> Result<bool> {
+        let token = self.get_token().await?;
+        let url = format!("{}/playlists?part=snippet&id={}", API_BASE, playlist_id);
+
+        match self.api_get::<YoutubePlaylistResponse>(&url, &token).await {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
+        }
     }
 }

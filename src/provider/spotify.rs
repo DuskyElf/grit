@@ -34,6 +34,18 @@ struct SpotifyPlaylist {
     description: Option<String>,
     snapshot_id: String,
     tracks: SpotifyTracks,
+    owner: SpotifyOwner,
+    collaborative: bool,
+}
+
+#[derive(Deserialize)]
+struct SpotifyOwner {
+    id: String,
+}
+
+#[derive(Deserialize)]
+struct SpotifyUser {
+    id: String,
 }
 
 #[derive(Deserialize)]
@@ -123,7 +135,8 @@ impl SpotifyProvider {
     /// Get access token, refreshing if expired
     async fn get_token(&self) -> Result<String> {
         let token_guard = self.token.lock().await;
-        let current_token = token_guard.as_ref()
+        let current_token = token_guard
+            .as_ref()
             .context("Not authenticated with Spotify")?
             .clone();
         drop(token_guard);
@@ -398,5 +411,17 @@ impl Provider for SpotifyProvider {
             .collect();
 
         Ok(tracks)
+    }
+
+    async fn can_modify_playlist(&self, playlist_id: &str) -> Result<bool> {
+        let token = self.get_token().await?;
+
+        let user_url = format!("{}/me", API_BASE);
+        let user: SpotifyUser = self.api_get(&user_url, &token).await?;
+
+        let playlist_url = format!("{}/playlists/{}", API_BASE, playlist_id);
+        let playlist: SpotifyPlaylist = self.api_get(&playlist_url, &token).await?;
+
+        Ok(playlist.owner.id == user.id || playlist.collaborative)
     }
 }

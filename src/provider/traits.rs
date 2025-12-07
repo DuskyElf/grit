@@ -27,4 +27,7 @@ pub trait Provider: Send + Sync {
 
     /// Refresh an expired token
     async fn refresh_token(&self, token: &OAuthToken) -> anyhow::Result<OAuthToken>;
+
+    /// Check if the authenticated user can modify the playlist
+    async fn can_modify_playlist(&self, playlist_id: &str) -> anyhow::Result<bool>;
 }
