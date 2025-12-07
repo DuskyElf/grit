@@ -1,4 +1,6 @@
-use crate::provider::{DiffPatch, OAuthToken, PlaylistSnapshot, Provider, ProviderKind, Track};
+use crate::provider::{
+    DiffPatch, OAuthToken, PlaylistSnapshot, Provider, ProviderKind, Track, TrackChange,
+};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -55,6 +57,17 @@ struct SpotifyTrackObject {
 struct SpotifyArtist {
     name: String,
 }
+
+#[derive(Deserialize)]
+struct SpotifySearchResponse {
+    tracks: SpotifySearchTracks,
+}
+
+#[derive(Deserialize)]
+struct SpotifySearchTracks {
+    items: Vec<SpotifyTrackObject>,
+}
+
 impl SpotifyTokenResponse {
     fn into_oauth_token(self) -> OAuthToken {
         use std::time::{SystemTime, UNIX_EPOCH};
@@ -258,8 +271,73 @@ impl Provider for SpotifyProvider {
         })
     }
 
-    async fn apply(&self, _playlist_id: &str, _patch: &DiffPatch) -> Result<()> {
-        todo!("Implement apply")
+    async fn apply(&self, playlist_id: &str, patch: &DiffPatch) -> Result<()> {
+        let token = self.get_token()?;
+
+        // Process in order: removals, additions, then moves
+        // (Processing removals first prevents index shifting issues)
+
+        for change in &patch.changes {
+            if let TrackChange::Removed { track, .. } = change {
+                let uri = format!("spotify:track:{}", track.id);
+                let body = serde_json::json!({
+                    "tracks": [{"uri": uri}]
+                });
+
+                let url = format!("{}/playlists/{}/tracks", API_BASE, playlist_id);
+
+                self.http
+                    .delete(&url)
+                    .header("Authorization", format!("Bearer {}", token))
+                    .json(&body)
+                    .send()
+                    .await?
+                    .error_for_status()?;
+            }
+        }
+
+        for change in &patch.changes {
+            if let TrackChange::Added { track, index } = change {
+                let uri = format!("spotify:track:{}", track.id);
+                let body = serde_json::json!({
+                    "uris": [uri],
+                    "position": index
+                });
+
+                self.http
+                    .post(format!("{}/playlists/{}/tracks", API_BASE, playlist_id))
+                    .header("Authorization", format!("Bearer {}", token))
+                    .json(&body)
+                    .send()
+                    .await?
+                    .error_for_status()?;
+            }
+        }
+
+        for change in &patch.changes {
+            if let TrackChange::Moved { from, to, .. } = change {
+                // Spotify's reorder API uses insert_before semantics:
+                // - When moving forward (from < to): insert_before = to + 1 (account for removal)
+                // - When moving backward (from > to): insert_before = to
+                let insert_before = if from < to { to + 1 } else { *to };
+
+                let body = serde_json::json!({
+                    "range_start": from,
+                    "insert_before": insert_before,
+                    "range_length": 1
+                });
+
+                self.http
+                    .put(format!("{}/playlists/{}/tracks", API_BASE, playlist_id))
+                    .header("Authorization", format!("Bearer {}", token))
+                    .json(&body)
+                    .send()
+                    .await?
+                    .error_for_status()?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn playable_url(&self, track: &Track) -> Result<String> {
@@ -267,7 +345,30 @@ impl Provider for SpotifyProvider {
         Ok(format!("spotify:track:{}", track.id))
     }
 
-    async fn search_by_query(&self, _query: &str) -> Result<Vec<Track>> {
-        todo!("Implement search")
+    async fn search_by_query(&self, query: &str) -> Result<Vec<Track>> {
+        let token = self.get_token()?;
+        let url = format!(
+            "{}/search?q={}&type=track&limit=10",
+            API_BASE,
+            urlencoding::encode(query)
+        );
+
+        let resp: SpotifySearchResponse = self.api_get(&url, token).await?;
+
+        let tracks = resp
+            .tracks
+            .items
+            .into_iter()
+            .map(|track| Track {
+                id: track.id,
+                name: track.name,
+                artists: track.artists.into_iter().map(|a| a.name).collect(),
+                duration_ms: track.duration_ms,
+                provider: ProviderKind::Spotify,
+                metadata: None,
+            })
+            .collect();
+
+        Ok(tracks)
     }
 }
