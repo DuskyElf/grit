@@ -1,7 +1,7 @@
 use crate::provider::{DiffPatch, OAuthToken, PlaylistSnapshot, Provider, ProviderKind, Track};
-use serde::Deserialize;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use serde::Deserialize;
 
 const AUTH_URL: &str = "https://accounts.spotify.com/authorize";
 const TOKEN_URL: &str = "https://accounts.spotify.com/api/token";
@@ -22,6 +22,38 @@ struct SpotifyTokenResponse {
     scope: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct SpotifyPlaylist {
+    id: String,
+    name: String,
+    description: Option<String>,
+    snapshot_id: String,
+    tracks: SpotifyTracks,
+}
+
+#[derive(Deserialize)]
+struct SpotifyTracks {
+    items: Vec<SpotifyTrackItem>,
+    next: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SpotifyTrackItem {
+    track: Option<SpotifyTrackObject>,
+}
+
+#[derive(Deserialize)]
+struct SpotifyTrackObject {
+    id: String,
+    name: String,
+    duration_ms: u64,
+    artists: Vec<SpotifyArtist>,
+}
+
+#[derive(Deserialize)]
+struct SpotifyArtist {
+    name: String,
+}
 impl SpotifyTokenResponse {
     fn into_oauth_token(self) -> OAuthToken {
         use std::time::{SystemTime, UNIX_EPOCH};
@@ -58,9 +90,13 @@ impl SpotifyProvider {
     }
 
     async fn token_request(&self, params: &[(&str, &str)]) -> Result<SpotifyTokenResponse> {
-        let response = self.http
+        let response = self
+            .http
             .post(TOKEN_URL)
-            .header("Authorization", format!("Basic {}", self.basic_auth_header()))
+            .header(
+                "Authorization",
+                format!("Basic {}", self.basic_auth_header()),
+            )
             .form(params)
             .send()
             .await
@@ -75,6 +111,27 @@ impl SpotifyProvider {
             .json()
             .await
             .context("Failed to parse token response")
+    }
+
+    async fn api_get<T: serde::de::DeserializeOwned>(&self, url: &str, token: &str) -> Result<T> {
+        let response = self
+            .http
+            .get(url)
+            .header("Authorization", format!("Bearer {}", token))
+            .send()
+            .await
+            .context("Failed to send API request")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Spotify API error {}: {}", status, error_text);
+        }
+
+        response
+            .json()
+            .await
+            .context("Failed to parse API response")
     }
 }
 
@@ -116,7 +173,9 @@ impl Provider for SpotifyProvider {
     }
 
     async fn refresh_token(&self, token: &OAuthToken) -> Result<OAuthToken> {
-        let refresh = token.refresh_token.as_ref()
+        let refresh = token
+            .refresh_token
+            .as_ref()
             .context("No refresh token available")?;
 
         let params = [
@@ -124,9 +183,7 @@ impl Provider for SpotifyProvider {
             ("refresh_token", refresh.as_str()),
         ];
 
-        let mut new_token = self.token_request(&params)
-            .await?
-            .into_oauth_token();
+        let mut new_token = self.token_request(&params).await?.into_oauth_token();
 
         // Spotify doesn't always return a new refresh_token
         if new_token.refresh_token.is_none() {
@@ -152,5 +209,4 @@ impl Provider for SpotifyProvider {
     async fn search_by_query(&self, _query: &str) -> Result<Vec<Track>> {
         todo!("Implement search")
     }
-
 }
