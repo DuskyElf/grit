@@ -1,4 +1,5 @@
 mod cli;
+mod playback;
 mod provider;
 mod state;
 mod utils;
@@ -91,7 +92,8 @@ async fn main() -> anyhow::Result<()> {
             cli::commands::vcs::pull(cli.playlist.as_deref(), &grit_dir).await?;
         }
         Commands::Diff { staged, remote } => {
-            cli::commands::vcs::diff_cmd(cli.playlist.as_deref(), &grit_dir, staged, remote).await?;
+            cli::commands::vcs::diff_cmd(cli.playlist.as_deref(), &grit_dir, staged, remote)
+                .await?;
         }
         Commands::Playlists { query } => {
             cli::commands::misc::playlists(query.as_deref(), &grit_dir).await?;
