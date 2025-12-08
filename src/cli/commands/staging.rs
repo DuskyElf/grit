@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Ok, Result};
+use std::io::{self, Write};
 use std::path::Path;
 
 use crate::{
@@ -124,15 +125,42 @@ pub async fn search(query: &str, provider: Option<ProviderKind>, plr_dir: &Path)
     }
 
     println!("\nSearch results for '{}':\n", query);
-    for (i, track) in tracks.iter().enumerate() {
-        let artists = track.artists.join(", ");
-        let duration_sec = track.duration_ms / 1000;
-        let min = duration_sec / 60;
-        let sec = duration_sec % 60;
 
-        println!("{}. {} - {}", i + 1, track.name, artists);
-        println!("   ID: {} | Duration: {}:{:02}", track.id, min, sec);
-        println!();
+    const PAGE_SIZE: usize = 5;
+    let mut start = 0;
+
+    loop {
+        let end = (start + PAGE_SIZE).min(tracks.len());
+        let page_tracks = &tracks[start..end];
+
+        for (i, track) in page_tracks.iter().enumerate() {
+            let artists = track.artists.join(", ");
+            let duration_sec = track.duration_ms / 1000;
+            let min = duration_sec / 60;
+            let sec = duration_sec % 60;
+
+            println!("{}. {} - {}", start + i + 1, track.name, artists);
+            println!("   ID: {} | Duration: {}:{:02}", track.id, min, sec);
+            println!();
+        }
+
+        start = end;
+
+        if start >= tracks.len() {
+            // All results shown
+            break;
+        }
+
+        // Prompt for more
+        print!("Show more? [Enter] or 'q' to quit: ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if input.trim().eq_ignore_ascii_case("q") {
+            break;
+        }
     }
 
     println!("Use 'plr add <track-id>' to stage a track for addition");
