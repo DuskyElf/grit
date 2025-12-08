@@ -2,6 +2,7 @@ mod cli;
 mod playback;
 mod provider;
 mod state;
+mod tui;
 mod utils;
 
 use clap::Parser;

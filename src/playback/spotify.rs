@@ -353,6 +353,30 @@ impl SpotifyPlayer {
         Ok(())
     }
 
+    /// Seek to position in seconds
+    pub async fn seek(&self, position_secs: u64) -> Result<()> {
+        let token = self.get_token().await?;
+        let device_id = self.device_id.as_ref().context("No device selected")?;
+        let position_ms = position_secs * 1000;
+
+        let resp = self
+            .http
+            .put(format!(
+                "{}/me/player/seek?device_id={}&position_ms={}",
+                API_BASE, device_id, position_ms
+            ))
+            .bearer_auth(&token)
+            .header("Content-Length", "0")
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            bail!("{}", parse_spotify_error(&text));
+        }
+        Ok(())
+    }
+
     /// Set volume (0-100)
     pub async fn set_volume(&self, volume: u8) -> Result<()> {
         let token = self.get_token().await?;

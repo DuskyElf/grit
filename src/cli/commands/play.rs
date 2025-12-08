@@ -1,13 +1,11 @@
-use std::io::{self, Write};
-use std::path::Path;
-
 use anyhow::{bail, Context, Result};
-use crossterm::event::{self, Event, KeyCode, KeyEvent};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crossterm::event::KeyCode;
+use std::path::Path;
 
 use crate::playback::{MpvPlayer, Queue, SpotifyPlayer};
 use crate::provider::ProviderKind;
 use crate::state::{credentials, snapshot};
+use crate::tui::{App, PlayerBackend, Tui};
 
 pub async fn run(playlist: Option<&str>, shuffle: bool, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist or -l)")?;
@@ -22,22 +20,17 @@ pub async fn run(playlist: Option<&str>, shuffle: bool, grit_dir: &Path) -> Resu
         bail!("Playlist is empty");
     }
 
-    println!("Playing: {} ({} tracks)", snap.name, snap.tracks.len());
-
-    // Use appropriate backend based on provider
     match snap.provider {
         ProviderKind::Spotify => play_spotify(&snap, shuffle, grit_dir).await,
         ProviderKind::Youtube => play_mpv(&snap, shuffle, grit_dir).await,
     }
 }
 
-/// Play using Spotify Connect (for Spotify playlists)
 async fn play_spotify(
     snap: &crate::provider::PlaylistSnapshot,
     shuffle: bool,
     grit_dir: &Path,
 ) -> Result<()> {
-    // Load Spotify credentials
     let token = credentials::load(grit_dir, ProviderKind::Spotify)?
         .context("No Spotify credentials. Run 'grit auth spotify' first.")?;
 
@@ -46,120 +39,113 @@ async fn play_spotify(
         std::env::var("SPOTIFY_CLIENT_SECRET").context("SPOTIFY_CLIENT_SECRET not set")?;
 
     let mut player = SpotifyPlayer::new(token, client_id, client_secret, grit_dir);
-
-    // Find a Spotify Connect device
     player.select_device().await?;
 
-    // Build list of track URIs
     let uris: Vec<String> = snap
         .tracks
         .iter()
         .map(|t| format!("spotify:track:{}", t.id))
         .collect();
 
-    // Set shuffle before playing
-    if shuffle {
-        player.set_shuffle(true).await?;
-        println!("Shuffle: ON");
-    }
-
-    // Start playback with all tracks
-    println!(
-        "\n[1/{}] {} - {}",
-        snap.tracks.len(),
-        snap.tracks[0].name,
-        snap.tracks[0].artists.join(", ")
-    );
+    player.set_shuffle(shuffle).await?;
     player.play(uris, 0).await?;
 
-    println!("\nControls: [space] pause  [n] next  [p] prev  [s] shuffle  [q] quit");
-    println!("(Playback controlled via Spotify Connect)");
+    let mut app = App::new(
+        snap.name.clone(),
+        snap.tracks.clone(),
+        PlayerBackend::Spotify,
+    );
+    app.shuffle = shuffle;
 
-    let mut is_paused = false;
-    let mut shuffle_on = shuffle;
-    enable_raw_mode()?;
+    let mut tui = Tui::new()?;
 
     loop {
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('q') => break,
-                    KeyCode::Char(' ') => {
-                        is_paused = !is_paused;
-                        let result = if is_paused {
-                            player.pause().await
-                        } else {
-                            player.resume().await
-                        };
-                        match result {
-                            Ok(_) => {
-                                if is_paused {
-                                    print!("\r[Paused]                              ");
-                                } else {
-                                    print!("\r[Playing]                             ");
-                                }
-                            }
-                            Err(e) => print!("\rError: {}                    ", e),
-                        }
-                        io::stdout().flush()?;
+        tui.draw(&app)?;
+
+        if !app.is_paused {
+            app.position_secs += 0.1;
+            if app.position_secs >= app.duration_secs && app.duration_secs > 0.0 {
+                app.position_secs = 0.0;
+            }
+        }
+
+        if let Some(key) = tui.poll_key()? {
+            app.clear_error();
+            match key {
+                KeyCode::Char('q') => break,
+                KeyCode::Char(' ') => {
+                    app.is_paused = !app.is_paused;
+                    let res = if app.is_paused {
+                        player.pause().await
+                    } else {
+                        player.resume().await
+                    };
+                    if let Err(e) = res {
+                        app.set_error(e.to_string());
                     }
-                    KeyCode::Char('n') => {
-                        match player.next().await {
-                            Ok(_) => {
-                                // Small delay for Spotify to update
-                                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                                if let Ok(Some((name, artists))) = player.get_currently_playing().await {
-                                    print!("\r▶ {} - {}                              ", name, artists);
-                                } else {
-                                    print!("\r[Next]                                ");
-                                }
-                            }
-                            Err(e) => print!("\rError: {}                    ", e),
-                        }
-                        io::stdout().flush()?;
-                    }
-                    KeyCode::Char('p') => {
-                        match player.previous().await {
-                            Ok(_) => {
-                                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                                if let Ok(Some((name, artists))) = player.get_currently_playing().await {
-                                    print!("\r▶ {} - {}                              ", name, artists);
-                                } else {
-                                    print!("\r[Prev]                                ");
-                                }
-                            }
-                            Err(e) => print!("\rError: {}                    ", e),
-                        }
-                        io::stdout().flush()?;
-                    }
-                    KeyCode::Char('s') => {
-                        shuffle_on = !shuffle_on;
-                        match player.set_shuffle(shuffle_on).await {
-                            Ok(_) => {
-                                if shuffle_on {
-                                    print!("\r[Shuffle: ON]                         ");
-                                } else {
-                                    print!("\r[Shuffle: OFF]                        ");
-                                }
-                            }
-                            Err(e) => print!("\rError: {}                    ", e),
-                        }
-                        io::stdout().flush()?;
-                    }
-                    _ => {}
                 }
+                KeyCode::Char('n') => {
+                    if let Err(e) = player.next().await {
+                        app.set_error(e.to_string());
+                    } else {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        if let Ok(Some((name, _))) = player.get_currently_playing().await {
+                            if let Some(idx) = app.tracks.iter().position(|t| t.name == name) {
+                                app.current_index = idx;
+                                app.position_secs = 0.0;
+                                app.duration_secs = app.tracks[idx].duration_ms as f64 / 1000.0;
+                            }
+                        }
+                    }
+                }
+                KeyCode::Char('p') => {
+                    if let Err(e) = player.previous().await {
+                        app.set_error(e.to_string());
+                    } else {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        if let Ok(Some((name, _))) = player.get_currently_playing().await {
+                            if let Some(idx) = app.tracks.iter().position(|t| t.name == name) {
+                                app.current_index = idx;
+                                app.position_secs = 0.0;
+                                app.duration_secs = app.tracks[idx].duration_ms as f64 / 1000.0;
+                            }
+                        }
+                    }
+                }
+                KeyCode::Char('s') => {
+                    app.shuffle = !app.shuffle;
+                    if let Err(e) = player.set_shuffle(app.shuffle).await {
+                        app.set_error(e.to_string());
+                    }
+                }
+                KeyCode::Left => {
+                    let new_pos = (app.position_secs - 5.0).max(0.0);
+                    if let Err(e) = player.seek(new_pos as u64).await {
+                        app.set_error(e.to_string());
+                    } else {
+                        app.position_secs = new_pos;
+                    }
+                }
+                KeyCode::Right => {
+                    let new_pos = app.position_secs + 5.0;
+                    if new_pos < app.duration_secs {
+                        if let Err(e) = player.seek(new_pos as u64).await {
+                            app.set_error(e.to_string());
+                        } else {
+                            app.position_secs = new_pos;
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
 
-    disable_raw_mode()?;
-    player.pause().await?; // Pause on quit
-    println!();
-
+    tui.restore()?;
+    let _ = player.pause().await;
     Ok(())
 }
 
-/// Play using mpv (for YouTube playlists)
 async fn play_mpv(
     snap: &crate::provider::PlaylistSnapshot,
     shuffle: bool,
@@ -168,110 +154,126 @@ async fn play_mpv(
     use crate::cli::commands::utils::create_provider;
 
     let provider = create_provider(snap.provider, grit_dir)?;
-
     let mut queue = Queue::new(snap.tracks.clone());
+
     if shuffle {
         queue.toggle_shuffle();
-        println!("Shuffle: ON");
     }
 
     let mut player = MpvPlayer::spawn().await?;
 
+    let mut app = App::new(snap.name.clone(), snap.tracks.clone(), PlayerBackend::Mpv);
+    app.shuffle = shuffle;
+    app.loading = true;
+
+    let mut tui = Tui::new()?;
+    tui.draw(&app)?;
+
     if let Some(track) = queue.current_track() {
         let url = provider.playable_url(track).await?;
-        println!(
-        "\n[{}/{}] {} - {}",
-        queue.position() + 1,
-        queue.len(),
-        track.name,
-        track.artists.join(", ")
-    );
         player.load(&url).await?;
+        app.duration_secs = track.duration_ms as f64 / 1000.0;
     }
-
-    println!("\nControls: [space] pause  [n] next  [p] prev  [s] shuffle  [q] quit");
-
-    let mut is_paused = false;
-    enable_raw_mode()?;
+    app.loading = false;
 
     loop {
-        // Check for keyboard input (non-blocking)
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent { code, .. }) = event::read()? {
-                match code {
-                    KeyCode::Char('q') => break,
-                    KeyCode::Char(' ') => {
-                        is_paused = !is_paused;
-                        if is_paused {
-                            player.pause().await?;
-                        } else {
-                            player.resume().await?;
-                        }
-                    }
-                    KeyCode::Char('n') => {
-                        if let Some(track) = queue.next() {
-                            let (name, artists) = (track.name.clone(), track.artists.join(", "));
-                            let url = provider.playable_url(track).await?;
-                            print!(
-                                "\r[{}/{}] {} - {}                    ",
-                                queue.position() + 1,
-                                queue.len(),
-                                name,
-                                artists
-                            );
-                            io::stdout().flush()?;
-                            player.load(&url).await?;
-                        }
-                    }
-                    KeyCode::Char('p') => {
-                        if let Some(track) = queue.previous() {
-                            let (name, artists) = (track.name.clone(), track.artists.join(", "));
-                            let url = provider.playable_url(track).await?;
-                            print!(
-                                "\r[{}/{}] {} - {}                    ",
-                                queue.position() + 1,
-                                queue.len(),
-                                name,
-                                artists
-                            );
-                            io::stdout().flush()?;
-                            player.load(&url).await?;
-                        }
-                    }
-                    KeyCode::Char('s') => {
-                        queue.toggle_shuffle();
-                    }
-                    _ => {}
-                }
+        tui.draw(&app)?;
+
+        if !app.is_paused {
+            if let Ok(Some(pos)) = player.get_position().await {
+                app.position_secs = pos;
             }
         }
 
-        // Check for mpv events (track ended)
-        if let Some(event) = player.try_recv_event() {
+        if let Some(key) = tui.poll_key()? {
+            app.clear_error();
+            match key {
+                KeyCode::Char('q') => break,
+                KeyCode::Char(' ') => {
+                    app.is_paused = !app.is_paused;
+                    let res = if app.is_paused {
+                        player.pause().await
+                    } else {
+                        player.resume().await
+                    };
+                    if let Err(e) = res {
+                        app.set_error(e.to_string());
+                    }
+                }
+                KeyCode::Char('n') => {
+                    if let Some(track) = queue.next().cloned() {
+                        app.loading = true;
+                        app.current_index = queue.position();
+                        tui.draw(&app)?;
+                        let duration = track.duration_ms as f64 / 1000.0;
+                        match provider.playable_url(&track).await {
+                            Ok(url) => {
+                                if let Err(e) = player.load(&url).await {
+                                    app.set_error(e.to_string());
+                                } else {
+                                    app.position_secs = 0.0;
+                                    app.duration_secs = duration;
+                                }
+                            }
+                            Err(e) => app.set_error(e.to_string()),
+                        }
+                        app.loading = false;
+                    }
+                }
+                KeyCode::Char('p') => {
+                    if let Some(track) = queue.previous().cloned() {
+                        app.loading = true;
+                        app.current_index = queue.position();
+                        tui.draw(&app)?;
+                        let duration = track.duration_ms as f64 / 1000.0;
+                        match provider.playable_url(&track).await {
+                            Ok(url) => {
+                                if let Err(e) = player.load(&url).await {
+                                    app.set_error(e.to_string());
+                                } else {
+                                    app.position_secs = 0.0;
+                                    app.duration_secs = duration;
+                                }
+                            }
+                            Err(e) => app.set_error(e.to_string()),
+                        }
+                        app.loading = false;
+                    }
+                }
+                KeyCode::Char('s') => {
+                    queue.toggle_shuffle();
+                    app.shuffle = !app.shuffle;
+                }
+                KeyCode::Left => {
+                    let _ = player.seek(-5).await;
+                }
+                KeyCode::Right => {
+                    let _ = player.seek(5).await;
+                }
+                _ => {}
+            }
+        }
+
+        // Check for track end and auto-advance
+        while let Some(event) = player.try_recv_event() {
             if MpvPlayer::is_track_finished(&event) {
-                // Auto-advance to next track
-                if let Some(track) = queue.next() {
-                    let (name, artists) = (track.name.clone(), track.artists.join(", "));
-                    let url = provider.playable_url(track).await?;
-                    print!(
-                        "\r[{}/{}] {} - {}                    ",
-                        queue.position() + 1,
-                        queue.len(),
-                        name,
-                        artists
-                    );
-                    io::stdout().flush()?;
-                    player.load(&url).await?;
-                } else {
-                    println!("\nPlaylist finished");
-                    break;
+                if let Some(track) = queue.next().cloned() {
+                    app.loading = true;
+                    app.current_index = queue.position();
+                    tui.draw(&app)?;
+                    let duration = track.duration_ms as f64 / 1000.0;
+                    if let Ok(url) = provider.playable_url(&track).await {
+                        let _ = player.load(&url).await;
+                        app.position_secs = 0.0;
+                        app.duration_secs = duration;
+                    }
+                    app.loading = false;
                 }
             }
         }
     }
 
-    disable_raw_mode()?;
+    tui.restore()?;
     player.quit().await?;
-
     Ok(())
 }

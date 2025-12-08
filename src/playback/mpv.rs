@@ -27,6 +27,7 @@ mod unix {
     enum MpvResponse {
         Event(MpvEvent),
         Result {
+            #[allow(dead_code)]
             error: String,
             #[serde(default)]
             data: Option<serde_json::Value>,
@@ -38,6 +39,7 @@ mod unix {
         process: Child,
         writer: BufWriter<tokio::net::unix::OwnedWriteHalf>,
         event_rx: mpsc::Receiver<MpvEvent>,
+        result_rx: mpsc::Receiver<Option<serde_json::Value>>,
     }
 
     /// Check if required dependencies are installed
@@ -127,33 +129,41 @@ mod unix {
             let (reader, writer) = stream.into_split();
             let writer = BufWriter::new(writer);
 
-            // Spawn task to read events
+            // Spawn task to read events and results
             let (event_tx, event_rx) = mpsc::channel(32);
-            tokio::spawn(Self::read_events(BufReader::new(reader), event_tx));
+            let (result_tx, result_rx) = mpsc::channel(32);
+            tokio::spawn(Self::read_events(BufReader::new(reader), event_tx, result_tx));
 
             Ok(Self {
                 socket_path,
                 process,
                 writer,
                 event_rx,
+                result_rx,
             })
         }
 
         /// Background task that reads events from mpv
         async fn read_events(
             mut reader: BufReader<tokio::net::unix::OwnedReadHalf>,
-            tx: mpsc::Sender<MpvEvent>,
+            event_tx: mpsc::Sender<MpvEvent>,
+            result_tx: mpsc::Sender<Option<serde_json::Value>>,
         ) {
             let mut line = String::new();
             loop {
                 line.clear();
                 match reader.read_line(&mut line).await {
-                    Ok(0) => break, // EOF
+                    Ok(0) => break,
                     Ok(_) => {
                         if let Ok(resp) = serde_json::from_str::<MpvResponse>(&line) {
-                            if let MpvResponse::Event(event) = resp {
-                                if tx.send(event).await.is_err() {
-                                    break; // Receiver dropped
+                            match resp {
+                                MpvResponse::Event(event) => {
+                                    if event_tx.send(event).await.is_err() {
+                                        break;
+                                    }
+                                }
+                                MpvResponse::Result { data, .. } => {
+                                    let _ = result_tx.send(data).await;
                                 }
                             }
                         }
@@ -239,6 +249,22 @@ mod unix {
         /// Wait for next event
         pub async fn recv_event(&mut self) -> Option<MpvEvent> {
             self.event_rx.recv().await
+        }
+
+        /// Get current playback position in seconds
+        pub async fn get_position(&mut self) -> Result<Option<f64>> {
+            self.send_command(vec![json!("get_property"), json!("time-pos")])
+                .await?;
+            // Wait for result with timeout
+            tokio::select! {
+                result = self.result_rx.recv() => {
+                    if let Some(Some(data)) = result {
+                        return Ok(data.as_f64());
+                    }
+                }
+                _ = tokio::time::sleep(tokio::time::Duration::from_millis(50)) => {}
+            }
+            Ok(None)
         }
 
         /// Check if track ended (call after recv_event)
