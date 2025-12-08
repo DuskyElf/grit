@@ -11,14 +11,14 @@ use crate::provider::ProviderKind;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub default_provider: Option<ProviderKind>,
-    pub plr_dir: PathBuf,
+    pub grit_dir: PathBuf,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             default_provider: None,
-            plr_dir: PathBuf::from(".plr"),
+            grit_dir: PathBuf::from(".grit"),
         }
     }
 }
@@ -44,15 +44,15 @@ impl Config {
     }
 
     pub fn config_path(&self) -> PathBuf {
-        self.plr_dir.join("config.toml")
+        self.grit_dir.join("config.toml")
     }
 
     pub fn credentials_dir(&self) -> PathBuf {
-        self.plr_dir.join("credentials")
+        self.grit_dir.join("credentials")
     }
 
     pub fn playlists_dir(&self) -> PathBuf {
-        self.plr_dir.join("playlists")
+        self.grit_dir.join("playlists")
     }
 }
 
@@ -65,7 +65,7 @@ mod tests{
     fn test_config_default(){
         let config = Config::default();
         assert_eq!(config.default_provider, None);
-        assert_eq!(config.plr_dir, PathBuf::from(".plr"));
+        assert_eq!(config.grit_dir, PathBuf::from(".grit"));
     }
 
     #[test]
@@ -75,21 +75,21 @@ mod tests{
 
         let config = Config{
             default_provider: Some(ProviderKind::Spotify),
-            plr_dir: PathBuf::from(".plr"),
+            grit_dir: PathBuf::from(".grit"),
         };
 
         config.save(&config_path).unwrap();
         let loaded = Config::load(&config_path).unwrap();
 
         assert_eq!(loaded.default_provider,config.default_provider);
-        assert_eq!(loaded.plr_dir, PathBuf::from(".plr"));
+        assert_eq!(loaded.grit_dir, PathBuf::from(".grit"));
     }
 
     #[test]
     fn test_config_paths() {
         let config = Config::default();
-        assert_eq!(config.config_path(), PathBuf::from(".plr/config.toml"));
-        assert_eq!(config.credentials_dir(), PathBuf::from(".plr/credentials"));
-        assert_eq!(config.playlists_dir(), PathBuf::from(".plr/playlists"));
+        assert_eq!(config.config_path(), PathBuf::from(".grit/config.toml"));
+        assert_eq!(config.credentials_dir(), PathBuf::from(".grit/credentials"));
+        assert_eq!(config.playlists_dir(), PathBuf::from(".grit/playlists"));
     }
 }

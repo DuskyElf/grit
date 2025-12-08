@@ -1,12 +1,12 @@
 use crate::provider::ProviderKind;
 use clap::{Parser, Subcommand};
 
-/// plr - Git-like version control for your playlists
+/// grit - Git-like version control for your playlists
 ///
 /// Track changes, sync across devices, and play music from
 /// Spotify and YouTube with a unified terminal interface.
 #[derive(Parser, Debug)]
-#[command(name = "plr")]
+#[command(name = "grit")]
 #[command(version, about, long_about = None)]
 pub struct Cli {
     #[arg(short, long, global = true)]

@@ -42,18 +42,18 @@ pub fn load(path: &Path) -> anyhow::Result<PlaylistSnapshot> {
         .with_context(|| "Failed to parse snapshot YAML")
 }
 
-pub fn snapshot_path(plr_dir: &Path, playlist_id: &str) -> std::path::PathBuf {
-    plr_dir.join("playlists").join(playlist_id).join("playlist.yaml")
+pub fn snapshot_path(grit_dir: &Path, playlist_id: &str) -> std::path::PathBuf {
+    grit_dir.join("playlists").join(playlist_id).join("playlist.yaml")
 }
 
 /// Get the snapshots directory path for a playlist
-pub fn snapshots_dir(plr_dir: &Path, playlist_id: &str) -> std::path::PathBuf {
-    plr_dir.join("playlists").join(playlist_id).join("snapshots")
+pub fn snapshots_dir(grit_dir: &Path, playlist_id: &str) -> std::path::PathBuf {
+    grit_dir.join("playlists").join(playlist_id).join("snapshots")
 }
 
 /// Save a snapshot with its hash for historical reference
-pub fn save_by_hash(snapshot: &PlaylistSnapshot, hash: &str, plr_dir: &Path, playlist_id: &str) -> anyhow::Result<()> {
-    let snapshots_dir = snapshots_dir(plr_dir, playlist_id);
+pub fn save_by_hash(snapshot: &PlaylistSnapshot, hash: &str, grit_dir: &Path, playlist_id: &str) -> anyhow::Result<()> {
+    let snapshots_dir = snapshots_dir(grit_dir, playlist_id);
     fs::create_dir_all(&snapshots_dir)
         .with_context(|| format!("Failed to create snapshots directory {:?}", snapshots_dir))?;
 
@@ -62,8 +62,8 @@ pub fn save_by_hash(snapshot: &PlaylistSnapshot, hash: &str, plr_dir: &Path, pla
 }
 
 /// Load a snapshot by its hash
-pub fn load_by_hash(hash: &str, plr_dir: &Path, playlist_id: &str) -> anyhow::Result<PlaylistSnapshot> {
-    let snapshots_dir = snapshots_dir(plr_dir, playlist_id);
+pub fn load_by_hash(hash: &str, grit_dir: &Path, playlist_id: &str) -> anyhow::Result<PlaylistSnapshot> {
+    let snapshots_dir = snapshots_dir(grit_dir, playlist_id);
 
     // Support partial hash matching
     if let std::result::Result::Ok(entries) = fs::read_dir(&snapshots_dir) {

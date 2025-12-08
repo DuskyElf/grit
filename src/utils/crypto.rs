@@ -10,8 +10,8 @@ use std::path::Path;
 const KEY_FILE: &str = "encryption.key";
 const NONCE_SIZE: usize = 12;
 
-fn get_or_create_key(plr_dir: &Path) -> Result<Vec<u8>> {
-    let key_path = plr_dir.join(KEY_FILE);
+fn get_or_create_key(grit_dir: &Path) -> Result<Vec<u8>> {
+    let key_path = grit_dir.join(KEY_FILE);
 
     if key_path.exists() {
         let key = fs::read(&key_path).context("Failed to read encryption key")?;
@@ -23,7 +23,7 @@ fn get_or_create_key(plr_dir: &Path) -> Result<Vec<u8>> {
         let mut key = vec![0u8; 32];
         OsRng.fill_bytes(&mut key);
 
-        fs::create_dir_all(plr_dir)?;
+        fs::create_dir_all(grit_dir)?;
         fs::write(&key_path, &key).context("Failed to write encryption key")?;
 
         #[cfg(unix)]
@@ -36,8 +36,8 @@ fn get_or_create_key(plr_dir: &Path) -> Result<Vec<u8>> {
     }
 }
 
-pub fn encrypt(data: &[u8], plr_dir: &Path) -> Result<Vec<u8>> {
-    let key_bytes = get_or_create_key(plr_dir)?;
+pub fn encrypt(data: &[u8], grit_dir: &Path) -> Result<Vec<u8>> {
+    let key_bytes = get_or_create_key(grit_dir)?;
     let cipher = Aes256Gcm::new_from_slice(&key_bytes)
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 
@@ -55,12 +55,12 @@ pub fn encrypt(data: &[u8], plr_dir: &Path) -> Result<Vec<u8>> {
     Ok(result)
 }
 
-pub fn decrypt(encrypted_data: &[u8], plr_dir: &Path) -> Result<Vec<u8>> {
+pub fn decrypt(encrypted_data: &[u8], grit_dir: &Path) -> Result<Vec<u8>> {
     if encrypted_data.len() < NONCE_SIZE {
         anyhow::bail!("Invalid encrypted data: too short");
     }
 
-    let key_bytes = get_or_create_key(plr_dir)?;
+    let key_bytes = get_or_create_key(grit_dir)?;
     let cipher = Aes256Gcm::new_from_slice(&key_bytes)
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
 

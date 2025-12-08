@@ -7,9 +7,9 @@ use crate::{
     state::credentials,
 };
 
-pub fn create_provider(provider_kind: ProviderKind, plr_dir: &Path) -> Result<Box<dyn Provider>> {
-    let token = credentials::load(plr_dir, provider_kind)?
-        .context("No credentials found. Please run 'plr auth <provider>' first.")?;
+pub fn create_provider(provider_kind: ProviderKind, grit_dir: &Path) -> Result<Box<dyn Provider>> {
+    let token = credentials::load(grit_dir, provider_kind)?
+        .context("No credentials found. Please run 'gritauth <provider>' first.")?;
 
     let provider: Box<dyn Provider> = match provider_kind {
         ProviderKind::Spotify => {
@@ -18,7 +18,7 @@ pub fn create_provider(provider_kind: ProviderKind, plr_dir: &Path) -> Result<Bo
             let client_secret =
                 std::env::var("SPOTIFY_CLIENT_SECRET").context("SPOTIFY_CLIENT_SECRET not set")?;
 
-            Box::new(SpotifyProvider::new(client_id, client_secret).with_token(&token, plr_dir))
+            Box::new(SpotifyProvider::new(client_id, client_secret).with_token(&token, grit_dir))
         }
         ProviderKind::Youtube => {
             let client_id =
@@ -26,7 +26,7 @@ pub fn create_provider(provider_kind: ProviderKind, plr_dir: &Path) -> Result<Bo
             let client_secret =
                 std::env::var("YOUTUBE_CLIENT_SECRET").context("YOUTUBE_CLIENT_SECRET not set")?;
 
-            Box::new(YoutubeProvider::new(client_id, client_secret).with_token(&token, plr_dir))
+            Box::new(YoutubeProvider::new(client_id, client_secret).with_token(&token, grit_dir))
         }
     };
     Ok(provider)

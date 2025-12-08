@@ -10,16 +10,16 @@ use crate::{
     },
 };
 
-pub async fn status(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn status(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
     let local_snapshot = snapshot::load(&snapshot_path)?;
-    let staged_patch = load_staged(plr_dir, playlist_id)?;
+    let staged_patch = load_staged(grit_dir, playlist_id)?;
 
     // Display staged changes
     println!("\n[Staged Changes]");
@@ -64,13 +64,13 @@ pub async fn status(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
         }
 
         println!("\n  Summary: +{} -{} ~{}", added, removed, moved);
-        println!("\nUse 'plr commit -m \"message\"' to commit these changes");
-        println!("Use 'plr reset' to discard staged changes");
+        println!("\nUse 'gritcommit -m \"message\"' to commit these changes");
+        println!("Use 'gritreset' to discard staged changes");
     }
 
     // Compare local vs remote
     println!("\n[Local vs Remote]");
-    let provider = create_provider(local_snapshot.provider, plr_dir)?;
+    let provider = create_provider(local_snapshot.provider, grit_dir)?;
 
     match provider.fetch(playlist_id).await {
         std::result::Result::Ok(remote_snapshot) => {
@@ -99,7 +99,7 @@ pub async fn status(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
                     removed,
                     moved
                 );
-                println!("\n  Use 'plr push' to sync with remote");
+                println!("\n  Use 'gritpush' to sync with remote");
             }
         }
         Err(e) => {
@@ -113,9 +113,9 @@ pub async fn status(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub async fn search(query: &str, provider: Option<ProviderKind>, plr_dir: &Path) -> Result<()> {
+pub async fn search(query: &str, provider: Option<ProviderKind>, grit_dir: &Path) -> Result<()> {
     let provider_kind = provider.context("Provider required for search (use --provider)")?;
-    let provider = create_provider(provider_kind, plr_dir)?;
+    let provider = create_provider(provider_kind, grit_dir)?;
 
     let tracks = provider.search_by_query(query).await?;
 
@@ -163,21 +163,21 @@ pub async fn search(query: &str, provider: Option<ProviderKind>, plr_dir: &Path)
         }
     }
 
-    println!("Use 'plr add <track-id>' to stage a track for addition");
+    println!("Use 'gritadd <track-id>' to stage a track for addition");
 
     Ok(())
 }
 
-pub async fn add(track_id: &str, playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn add(track_id: &str, playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
-    let provider = create_provider(snapshot.provider, plr_dir)?;
+    let provider = create_provider(snapshot.provider, grit_dir)?;
 
     let track = provider.fetch_track(track_id).await?;
 
@@ -197,7 +197,7 @@ pub async fn add(track_id: &str, playlist: Option<&str>, plr_dir: &Path) -> Resu
         index,
     };
 
-    stage_change(plr_dir, playlist_id, change)?;
+    stage_change(grit_dir, playlist_id, change)?;
 
     println!(
         "Staged for addition: {} - {}",
@@ -205,18 +205,18 @@ pub async fn add(track_id: &str, playlist: Option<&str>, plr_dir: &Path) -> Resu
         track.artists.join(", ")
     );
     println!("  Position: {}", index);
-    println!("\nUse 'plr status' to see all staged changes");
-    println!("Use 'plr commit -m \"message\"' to commit");
+    println!("\nUse 'gritstatus' to see all staged changes");
+    println!("Use 'gritcommit -m \"message\"' to commit");
 
     Ok(())
 }
 
-pub async fn remove(track_id: &str, playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn remove(track_id: &str, playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
@@ -233,7 +233,7 @@ pub async fn remove(track_id: &str, playlist: Option<&str>, plr_dir: &Path) -> R
         index,
     };
 
-    stage_change(plr_dir, playlist_id, change)?;
+    stage_change(grit_dir, playlist_id, change)?;
 
     println!(
         "Staged for removal: {} - {}",
@@ -241,8 +241,8 @@ pub async fn remove(track_id: &str, playlist: Option<&str>, plr_dir: &Path) -> R
         track.artists.join(", ")
     );
     println!("  Position: {}", index);
-    println!("\nUse 'plr status' to see all staged changes");
-    println!("Use 'plr commit -m \"message\"' to commit");
+    println!("\nUse 'gritstatus' to see all staged changes");
+    println!("Use 'gritcommit -m \"message\"' to commit");
 
     Ok(())
 }
@@ -251,13 +251,13 @@ pub async fn move_track(
     track_id: &str,
     new_index: usize,
     playlist: Option<&str>,
-    plr_dir: &Path,
+    grit_dir: &Path,
 ) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
@@ -287,31 +287,31 @@ pub async fn move_track(
         to: new_index,
     };
 
-    stage_change(plr_dir, playlist_id, change)?;
+    stage_change(grit_dir, playlist_id, change)?;
 
     println!("Staged move: {} - {}", track.name, track.artists.join(", "));
     println!("  From: {} → To: {}", from_index, new_index);
-    println!("\nUse 'plr status' to see all staged changes");
-    println!("Use 'plr commit -m \"message\"' to commit");
+    println!("\nUse 'gritstatus' to see all staged changes");
+    println!("Use 'gritcommit -m \"message\"' to commit");
 
     Ok(())
 }
 
-pub async fn reset(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn reset(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
-    let patch = load_staged(plr_dir, playlist_id)?;
+    let patch = load_staged(grit_dir, playlist_id)?;
     if patch.changes.is_empty() {
         println!("No staged changes to reset.");
         return Ok(());
     }
 
-    clear_staged(plr_dir, playlist_id)?;
+    clear_staged(grit_dir, playlist_id)?;
 
     println!("Staged changes cleared.");
     println!("  {} operations discarded", patch.changes.len());
@@ -319,15 +319,15 @@ pub async fn reset(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub async fn commit(message: &str, playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn commit(message: &str, playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
-    let patch = load_staged(plr_dir, playlist_id)?;
+    let patch = load_staged(grit_dir, playlist_id)?;
     if patch.changes.is_empty() {
         println!("No staged changes to commit.");
         return Ok(());
@@ -352,11 +352,11 @@ pub async fn commit(message: &str, playlist: Option<&str>, plr_dir: &Path) -> Re
     let hash = snapshot::compute_hash(&snapshot_copy)?;
 
     // Save snapshot by hash for revert functionality
-    snapshot::save_by_hash(&snapshot_copy, &hash, plr_dir, playlist_id)?;
+    snapshot::save_by_hash(&snapshot_copy, &hash, grit_dir, playlist_id)?;
 
     snapshot::save(&snapshot_copy, &snapshot_path)?;
 
-    let journal_path = JournalEntry::journal_path(plr_dir, playlist_id);
+    let journal_path = JournalEntry::journal_path(grit_dir, playlist_id);
     let entry = JournalEntry::new_with_message(
         Operation::Commit,
         hash.clone(),
@@ -367,12 +367,12 @@ pub async fn commit(message: &str, playlist: Option<&str>, plr_dir: &Path) -> Re
     );
     JournalEntry::append(&journal_path, &entry)?;
 
-    clear_staged(plr_dir, playlist_id)?;
+    clear_staged(grit_dir, playlist_id)?;
 
     println!("\n[{}] {}", hash, message);
     println!("  +{} -{} ~{} tracks", added, removed, moved);
     println!("\nChanges committed to local snapshot.");
-    println!("Use 'plr push' to sync with remote.");
+    println!("Use 'gritpush' to sync with remote.");
 
     Ok(())
 }

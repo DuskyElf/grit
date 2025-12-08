@@ -1,5 +1,5 @@
 use crate::provider::{Provider, ProviderKind, SpotifyProvider, YoutubeProvider};
-use crate::state::{clear_staged, credentials, journal, snapshot, JournalEntry, Operation};
+use crate::state::{clear_staged, credentials, snapshot, JournalEntry, Operation};
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -27,10 +27,10 @@ fn extract_playlist_id(input: &str) -> String {
     input.to_string()
 }
 
-pub async fn run(provider: ProviderKind, playlist: &str, plr_dir: &Path) -> Result<()> {
+pub async fn run(provider: ProviderKind, playlist: &str, grit_dir: &Path) -> Result<()> {
     let playlist_id = extract_playlist_id(playlist);
     //if already initialized, return error
-    let snapshot_path = snapshot::snapshot_path(plr_dir, &playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, &playlist_id);
     if snapshot_path.exists() {
         anyhow::bail!(
             "Playlist {} already initialized. Use 'pull' to update.",
@@ -38,8 +38,8 @@ pub async fn run(provider: ProviderKind, playlist: &str, plr_dir: &Path) -> Resu
         );
     }
 
-    let token = credentials::load(plr_dir, provider)?
-        .context("No credentials found. Please run 'plr auth <provider>' first.")?;
+    let token = credentials::load(grit_dir, provider)?
+        .context("No credentials found. Please run 'gritauth <provider>' first.")?;
 
     let provider_impl: Box<dyn Provider> = match provider {
         ProviderKind::Spotify => {
@@ -48,7 +48,7 @@ pub async fn run(provider: ProviderKind, playlist: &str, plr_dir: &Path) -> Resu
             let client_secret =
                 std::env::var("SPOTIFY_CLIENT_SECRET").context("SPOTIFY_CLIENT_SECRET not set")?;
 
-            Box::new(SpotifyProvider::new(client_id, client_secret).with_token(&token, plr_dir))
+            Box::new(SpotifyProvider::new(client_id, client_secret).with_token(&token, grit_dir))
         }
         ProviderKind::Youtube => {
             let client_id =
@@ -56,7 +56,7 @@ pub async fn run(provider: ProviderKind, playlist: &str, plr_dir: &Path) -> Resu
             let client_secret =
                 std::env::var("YOUTUBE_CLIENT_SECRET").context("YOUTUBE_CLIENT_SECRET not set")?;
 
-            Box::new(YoutubeProvider::new(client_id, client_secret).with_token(&token, plr_dir))
+            Box::new(YoutubeProvider::new(client_id, client_secret).with_token(&token, grit_dir))
         }
     };
 
@@ -71,14 +71,14 @@ pub async fn run(provider: ProviderKind, playlist: &str, plr_dir: &Path) -> Resu
     let hash = snapshot::compute_hash(&playlist)?;
 
     // Save snapshot by hash for revert functionality
-    snapshot::save_by_hash(&playlist, &hash, plr_dir, &playlist_id)?;
+    snapshot::save_by_hash(&playlist, &hash, grit_dir, &playlist_id)?;
 
-    let journal_path = JournalEntry::journal_path(plr_dir, &playlist_id);
+    let journal_path = JournalEntry::journal_path(grit_dir, &playlist_id);
     let entry = JournalEntry::new(Operation::Init, hash, playlist.tracks.len(), 0, 0);
     JournalEntry::append(&journal_path, &entry)?;
 
     // Clear any staged changes
-    clear_staged(plr_dir, &playlist_id)?;
+    clear_staged(grit_dir, &playlist_id)?;
 
     println!("\nPlaylist initialized!");
     println!("  Snapshot: {:?}", snapshot_path);

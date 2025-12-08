@@ -7,15 +7,15 @@ use crate::{
     state::{diff, load_staged, snapshot, JournalEntry, Operation},
 };
 
-pub async fn push(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn push(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
-    let staged = load_staged(plr_dir, playlist_id)?;
+    let staged = load_staged(grit_dir, playlist_id)?;
     if !staged.changes.is_empty() {
         bail!(
             "You have {} uncommitted staged change(s). Please commit or reset before pushing.",
@@ -24,7 +24,7 @@ pub async fn push(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
     }
 
     let local_snapshot = snapshot::load(&snapshot_path)?;
-    let provider = create_provider(local_snapshot.provider, plr_dir)?;
+    let provider = create_provider(local_snapshot.provider, grit_dir)?;
 
     println!("Verifying write permissions...");
     let can_modify = provider.can_modify_playlist(playlist_id).await?;
@@ -66,7 +66,7 @@ pub async fn push(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
 
     // Record in journal
     let hash = snapshot::compute_hash(&local_snapshot)?;
-    let journal_path = JournalEntry::journal_path(plr_dir, playlist_id);
+    let journal_path = JournalEntry::journal_path(grit_dir, playlist_id);
     let entry = JournalEntry::new(Operation::Push, hash, added, removed, moved);
     JournalEntry::append(&journal_path, &entry)?;
 
@@ -76,15 +76,15 @@ pub async fn push(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub async fn log(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn log(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
-    let journal_path = JournalEntry::journal_path(plr_dir, playlist_id);
+    let journal_path = JournalEntry::journal_path(grit_dir, playlist_id);
     let entries = JournalEntry::read_all(&journal_path)?;
 
     if entries.is_empty() {
@@ -124,15 +124,15 @@ pub async fn log(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub async fn pull(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn pull(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
-    let staged = load_staged(plr_dir, playlist_id)?;
+    let staged = load_staged(grit_dir, playlist_id)?;
     if !staged.changes.is_empty() {
         bail!(
             "You have {} uncommitted staged change(s). Please commit or reset before pulling.",
@@ -141,7 +141,7 @@ pub async fn pull(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
     }
 
     let local_snapshot = snapshot::load(&snapshot_path)?;
-    let provider = create_provider(local_snapshot.provider, plr_dir)?;
+    let provider = create_provider(local_snapshot.provider, grit_dir)?;
 
     println!("Fetching remote playlist state...");
     let remote_snapshot = provider.fetch(playlist_id).await?;
@@ -177,7 +177,7 @@ pub async fn pull(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
     snapshot::save(&remote_snapshot, &snapshot_path)?;
 
     // Record in journal
-    let journal_path = JournalEntry::journal_path(plr_dir, playlist_id);
+    let journal_path = JournalEntry::journal_path(grit_dir, playlist_id);
     let entry = JournalEntry::new(Operation::Pull, remote_hash, added, removed, moved);
     JournalEntry::append(&journal_path, &entry)?;
 
@@ -189,15 +189,15 @@ pub async fn pull(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
 
 pub async fn diff_cmd(
     playlist: Option<&str>,
-    plr_dir: &Path,
+    grit_dir: &Path,
     staged: bool,
     remote: bool,
 ) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
     let local_snapshot = snapshot::load(&snapshot_path)?;
@@ -208,7 +208,7 @@ pub async fn diff_cmd(
     if show_staged {
         println!("\n[Staged Changes]\n");
 
-        let patch = load_staged(plr_dir, playlist_id)?;
+        let patch = load_staged(grit_dir, playlist_id)?;
 
         if patch.changes.is_empty() {
             println!("No staged changes.\n");
@@ -249,7 +249,7 @@ pub async fn diff_cmd(
     if remote {
         println!("\n[Local vs Remote]\n");
 
-        let provider = create_provider(local_snapshot.provider, plr_dir)?;
+        let provider = create_provider(local_snapshot.provider, grit_dir)?;
 
         match provider.fetch(playlist_id).await {
             std::result::Result::Ok(remote_snapshot) => {
@@ -300,16 +300,16 @@ pub async fn diff_cmd(
     Ok(())
 }
 
-pub async fn revert(hash: Option<&str>, playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn revert(hash: Option<&str>, playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
     // Check for uncommitted staged changes
-    let staged = load_staged(plr_dir, playlist_id)?;
+    let staged = load_staged(grit_dir, playlist_id)?;
     if !staged.changes.is_empty() {
         bail!(
             "You have {} uncommitted staged change(s). Commit or reset before reverting.",
@@ -322,7 +322,7 @@ pub async fn revert(hash: Option<&str>, playlist: Option<&str>, plr_dir: &Path) 
         h.to_string()
     } else {
         // No hash provided - revert to previous commit
-        let journal_path = JournalEntry::journal_path(plr_dir, playlist_id);
+        let journal_path = JournalEntry::journal_path(grit_dir, playlist_id);
         let entries = JournalEntry::read_all(&journal_path)?;
 
         if entries.len() < 2 {
@@ -334,7 +334,7 @@ pub async fn revert(hash: Option<&str>, playlist: Option<&str>, plr_dir: &Path) 
     };
 
     // Load the target snapshot by hash
-    let target_snapshot = snapshot::load_by_hash(&target_hash, plr_dir, playlist_id)
+    let target_snapshot = snapshot::load_by_hash(&target_hash, grit_dir, playlist_id)
         .with_context(|| format!("Failed to load snapshot with hash '{}'", target_hash))?;
 
     let full_hash = snapshot::compute_hash(&target_snapshot)?;
@@ -343,7 +343,7 @@ pub async fn revert(hash: Option<&str>, playlist: Option<&str>, plr_dir: &Path) 
     snapshot::save(&target_snapshot, &snapshot_path)?;
 
     // Record in journal
-    let journal_path = JournalEntry::journal_path(plr_dir, playlist_id);
+    let journal_path = JournalEntry::journal_path(grit_dir, playlist_id);
     let entry = JournalEntry::new_with_message(
         Operation::Commit,
         full_hash.clone(),
@@ -357,12 +357,12 @@ pub async fn revert(hash: Option<&str>, playlist: Option<&str>, plr_dir: &Path) 
     println!("\nReverted to commit [{}]", full_hash);
     println!("Playlist: {}", target_snapshot.name);
     println!("Tracks: {}", target_snapshot.tracks.len());
-    println!("\nUse 'plr push' to sync with remote if desired.");
+    println!("\nUse 'gritpush' to sync with remote if desired.");
 
     Ok(())
 }
 
-pub async fn apply(file_path: &str, playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn apply(file_path: &str, playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     // Load the snapshot from YAML file
     let file_content = std::fs::read_to_string(file_path)
         .with_context(|| format!("Failed to read file: {}", file_path))?;
@@ -372,9 +372,9 @@ pub async fn apply(file_path: &str, playlist: Option<&str>, plr_dir: &Path) -> R
 
     let playlist_id = playlist.unwrap_or(&snapshot.id);
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist {} not initialized. Run 'plr init' first.", playlist_id);
+        bail!("Playlist {} not initialized. Run 'gritinit' first.", playlist_id);
     }
 
     // Load current snapshot to check provider compatibility
@@ -388,7 +388,7 @@ pub async fn apply(file_path: &str, playlist: Option<&str>, plr_dir: &Path) -> R
     }
 
     // Check for uncommitted staged changes
-    let staged = load_staged(plr_dir, playlist_id)?;
+    let staged = load_staged(grit_dir, playlist_id)?;
     if !staged.changes.is_empty() {
         bail!(
             "You have {} uncommitted staged change(s). Commit or reset before applying.",
@@ -399,10 +399,10 @@ pub async fn apply(file_path: &str, playlist: Option<&str>, plr_dir: &Path) -> R
     // Compute hash and save snapshot
     let hash = snapshot::compute_hash(&snapshot)?;
     snapshot::save(&snapshot, &snapshot_path)?;
-    snapshot::save_by_hash(&snapshot, &hash, plr_dir, playlist_id)?;
+    snapshot::save_by_hash(&snapshot, &hash, grit_dir, playlist_id)?;
 
     // Record in journal
-    let journal_path = JournalEntry::journal_path(plr_dir, playlist_id);
+    let journal_path = JournalEntry::journal_path(grit_dir, playlist_id);
     let entry = JournalEntry::new_with_message(
         Operation::Apply,
         hash.clone(),
@@ -417,7 +417,7 @@ pub async fn apply(file_path: &str, playlist: Option<&str>, plr_dir: &Path) -> R
     println!("  Playlist: {}", snapshot.name);
     println!("  Tracks: {}", snapshot.tracks.len());
     println!("  Hash: [{}]", hash);
-    println!("\nUse 'plr push' to sync with remote if desired.");
+    println!("\nUse 'gritpush' to sync with remote if desired.");
 
     Ok(())
 }

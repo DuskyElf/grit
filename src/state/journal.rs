@@ -96,8 +96,8 @@ impl JournalEntry {
             .collect()
     }
 
-    pub fn journal_path(plr_dir: &Path, playlist_id: &str) -> std::path::PathBuf {
-        plr_dir
+    pub fn journal_path(grit_dir: &Path, playlist_id: &str) -> std::path::PathBuf {
+        grit_dir
             .join("playlists")
             .join(playlist_id)
             .join("journal.log")

@@ -5,8 +5,8 @@ use base64::Engine;
 use std::fs;
 use std::path::Path;
 
-pub fn save(plr_dir: &Path, provider: ProviderKind, token: &OAuthToken) -> Result<()> {
-    let path = credentials_path(plr_dir, provider);
+pub fn save(grit_dir: &Path, provider: ProviderKind, token: &OAuthToken) -> Result<()> {
+    let path = credentials_path(grit_dir, provider);
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -16,7 +16,7 @@ pub fn save(plr_dir: &Path, provider: ProviderKind, token: &OAuthToken) -> Resul
     let json = serde_json::to_string(token).context("Failed to serialize token")?;
 
     let encrypted =
-        crypto::encrypt(json.as_bytes(), plr_dir).context("Failed to encrypt credentials")?;
+        crypto::encrypt(json.as_bytes(), grit_dir).context("Failed to encrypt credentials")?;
 
     let encoded = base64::engine::general_purpose::STANDARD.encode(&encrypted);
 
@@ -32,8 +32,8 @@ pub fn save(plr_dir: &Path, provider: ProviderKind, token: &OAuthToken) -> Resul
     Ok(())
 }
 
-pub fn load(plr_dir: &Path, provider: ProviderKind) -> Result<Option<OAuthToken>> {
-    let path = credentials_path(plr_dir, provider);
+pub fn load(grit_dir: &Path, provider: ProviderKind) -> Result<Option<OAuthToken>> {
+    let path = credentials_path(grit_dir, provider);
 
     if !path.exists() {
         return Ok(None);
@@ -47,7 +47,7 @@ pub fn load(plr_dir: &Path, provider: ProviderKind) -> Result<Option<OAuthToken>
         .context("Failed to decode credentials")?;
 
     let decrypted =
-        crypto::decrypt(&encrypted, plr_dir).context("Failed to decrypt credentials")?;
+        crypto::decrypt(&encrypted, grit_dir).context("Failed to decrypt credentials")?;
 
     let json = String::from_utf8(decrypted).context("Invalid UTF-8 in decrypted credentials")?;
 
@@ -71,8 +71,8 @@ pub fn is_expired(token: &OAuthToken) -> bool {
 }
 
 /// Delete credentials for a provider
-pub fn delete(plr_dir: &Path, provider: ProviderKind) -> Result<()> {
-    let path = credentials_path(plr_dir, provider);
+pub fn delete(grit_dir: &Path, provider: ProviderKind) -> Result<()> {
+    let path = credentials_path(grit_dir, provider);
 
     if path.exists() {
         fs::remove_file(&path)
@@ -82,12 +82,12 @@ pub fn delete(plr_dir: &Path, provider: ProviderKind) -> Result<()> {
     Ok(())
 }
 
-fn credentials_path(plr_dir: &Path, provider: ProviderKind) -> std::path::PathBuf {
+fn credentials_path(grit_dir: &Path, provider: ProviderKind) -> std::path::PathBuf {
     let filename = match provider {
         ProviderKind::Spotify => "spotify.json",
         ProviderKind::Youtube => "youtube.json",
     };
-    plr_dir.join("credentials").join(filename)
+    grit_dir.join("credentials").join(filename)
 }
 
 #[cfg(test)]

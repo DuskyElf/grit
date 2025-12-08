@@ -3,8 +3,8 @@ use anyhow::{Context, Ok, Result};
 use std::fs;
 use std::path::Path;
 
-pub fn load_staged(plr_dir: &Path, playlist_id: &str) -> Result<DiffPatch> {
-    let staged_path = plr_dir
+pub fn load_staged(grit_dir: &Path, playlist_id: &str) -> Result<DiffPatch> {
+    let staged_path = grit_dir
         .join("playlists")
         .join(playlist_id)
         .join("staged.json");
@@ -21,8 +21,8 @@ pub fn load_staged(plr_dir: &Path, playlist_id: &str) -> Result<DiffPatch> {
     Ok(patch)
 }
 
-pub fn save_staged(plr_dir: &Path, playlist_id: &str, patch: &DiffPatch) -> Result<()> {
-    let staged_path = plr_dir
+pub fn save_staged(grit_dir: &Path, playlist_id: &str, patch: &DiffPatch) -> Result<()> {
+    let staged_path = grit_dir
         .join("playlists")
         .join(playlist_id)
         .join("staged.json");
@@ -34,17 +34,17 @@ pub fn save_staged(plr_dir: &Path, playlist_id: &str, patch: &DiffPatch) -> Resu
     Ok(())
 }
 
-pub fn clear_staged(plr_dir: &Path, playlist_id: &str) -> Result<()> {
-    save_staged(plr_dir, playlist_id, &DiffPatch { changes: vec![] })
+pub fn clear_staged(grit_dir: &Path, playlist_id: &str) -> Result<()> {
+    save_staged(grit_dir, playlist_id, &DiffPatch { changes: vec![] })
 }
 
-pub fn stage_change(plr_dir: &Path, playlist_id: &str, change: TrackChange) -> Result<()> {
-    let mut patch = load_staged(plr_dir, playlist_id)?;
+pub fn stage_change(grit_dir: &Path, playlist_id: &str, change: TrackChange) -> Result<()> {
+    let mut patch = load_staged(grit_dir, playlist_id)?;
     patch.changes.push(change);
-    save_staged(plr_dir, playlist_id, &patch)
+    save_staged(grit_dir, playlist_id, &patch)
 }
 
-pub fn has_staged_changes(plr_dir: &Path, playlist_id: &str) -> Result<bool> {
-    let patch = load_staged(plr_dir, playlist_id)?;
+pub fn has_staged_changes(grit_dir: &Path, playlist_id: &str) -> Result<bool> {
+    let patch = load_staged(grit_dir, playlist_id)?;
     Ok(!patch.changes.is_empty())
 }

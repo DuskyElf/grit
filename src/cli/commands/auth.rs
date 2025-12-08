@@ -8,14 +8,14 @@ use std::path::Path;
 const REDIRECT_URI: &str = "http://127.0.0.1:8888/callback";
 
 /// Run the authentication flow for the given provider.
-pub async fn run(provider: ProviderKind, plr_dir: &Path) -> Result<()> {
+pub async fn run(provider: ProviderKind, grit_dir: &Path) -> Result<()> {
     match provider {
-        ProviderKind::Spotify => auth_spotify(plr_dir).await,
-        ProviderKind::Youtube => auth_youtube(plr_dir).await,
+        ProviderKind::Spotify => auth_spotify(grit_dir).await,
+        ProviderKind::Youtube => auth_youtube(grit_dir).await,
     }
 }
 
-async fn auth_spotify(plr_dir: &Path) -> Result<()> {
+async fn auth_spotify(grit_dir: &Path) -> Result<()> {
     let client_id =
         std::env::var("SPOTIFY_CLIENT_ID").context("Set SPOTIFY_CLIENT_ID environment variable")?;
     let client_secret = std::env::var("SPOTIFY_CLIENT_SECRET")
@@ -36,18 +36,18 @@ async fn auth_spotify(plr_dir: &Path) -> Result<()> {
     println!("Exchanging code for token...");
     let token = provider.exchange_code(&code, REDIRECT_URI).await?;
 
-    credentials::save(plr_dir, ProviderKind::Spotify, &token)?;
+    credentials::save(grit_dir, ProviderKind::Spotify, &token)?;
 
     println!("\nSuccessfully authenticated with Spotify!");
     println!(
         "  Token saved to {:?}",
-        plr_dir.join("credentials/spotify.json")
+        grit_dir.join("credentials/spotify.json")
     );
 
     Ok(())
 }
 
-async fn auth_youtube(plr_dir: &Path) -> Result<()> {
+async fn auth_youtube(grit_dir: &Path) -> Result<()> {
     let client_id =
         std::env::var("YOUTUBE_CLIENT_ID").context("Set YOUTUBE_CLIENT_ID environment variable")?;
     let client_secret = std::env::var("YOUTUBE_CLIENT_SECRET")
@@ -68,12 +68,12 @@ async fn auth_youtube(plr_dir: &Path) -> Result<()> {
     println!("Exchanging code for token...");
     let token = provider.exchange_code(&code, REDIRECT_URI).await?;
 
-    credentials::save(plr_dir, ProviderKind::Youtube, &token)?;
+    credentials::save(grit_dir, ProviderKind::Youtube, &token)?;
 
     println!("\nSuccessfully authenticated with YouTube!");
     println!(
         "  Token saved to {:?}",
-        plr_dir.join("credentials/youtube.json")
+        grit_dir.join("credentials/youtube.json")
     );
 
     Ok(())
@@ -137,9 +137,9 @@ fn send_response(stream: &mut impl Write, status: &str, body: &str) -> Result<()
     Ok(())
 }
 
-pub async fn logout(provider: ProviderKind, plr_dir: &Path) -> Result<()> {
+pub async fn logout(provider: ProviderKind, grit_dir: &Path) -> Result<()> {
     // Check if credentials exist
-    let token = credentials::load(plr_dir, provider)?;
+    let token = credentials::load(grit_dir, provider)?;
 
     if token.is_none() {
         println!("Not logged in to {:?}", provider);
@@ -147,17 +147,17 @@ pub async fn logout(provider: ProviderKind, plr_dir: &Path) -> Result<()> {
     }
 
     // Delete credentials
-    credentials::delete(plr_dir, provider)?;
+    credentials::delete(grit_dir, provider)?;
 
     println!("Logged out from {:?}", provider);
-    println!("Run 'plr auth {:?}' to login again", provider);
+    println!("Run 'gritauth {:?}' to login again", provider);
 
     Ok(())
 }
 
-pub async fn whoami(provider: ProviderKind, plr_dir: &Path) -> Result<()> {
-    let token = credentials::load(plr_dir, provider)?
-        .context("Not authenticated. Run 'plr auth <provider>' first")?;
+pub async fn whoami(provider: ProviderKind, grit_dir: &Path) -> Result<()> {
+    let token = credentials::load(grit_dir, provider)?
+        .context("Not authenticated. Run 'gritauth <provider>' first")?;
 
     match provider {
         ProviderKind::Spotify => {

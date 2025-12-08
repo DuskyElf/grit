@@ -14,7 +14,7 @@ pub struct SpotifyProvider {
     client_id: String,
     client_secret: String,
     token: Mutex<Option<OAuthToken>>,
-    plr_dir: Option<std::path::PathBuf>,
+    grit_dir: Option<std::path::PathBuf>,
     http: reqwest::Client,
 }
 
@@ -108,14 +108,14 @@ impl SpotifyProvider {
             client_id,
             client_secret,
             token: Mutex::new(None),
-            plr_dir: None,
+            grit_dir: None,
             http: reqwest::Client::new(),
         }
     }
 
-    pub fn with_token(mut self, token: &OAuthToken, plr_dir: &std::path::Path) -> Self {
+    pub fn with_token(mut self, token: &OAuthToken, grit_dir: &std::path::Path) -> Self {
         self.token = Mutex::new(Some(token.clone()));
-        self.plr_dir = Some(plr_dir.to_path_buf());
+        self.grit_dir = Some(grit_dir.to_path_buf());
         self
     }
 
@@ -145,9 +145,9 @@ impl SpotifyProvider {
             println!("Token expired, refreshing...");
             let new_token = self.refresh_token(&current_token).await?;
 
-            if let Some(plr_dir) = &self.plr_dir {
+            if let Some(grit_dir) = &self.grit_dir {
                 use crate::state::credentials;
-                credentials::save(plr_dir, ProviderKind::Spotify, &new_token)?;
+                credentials::save(grit_dir, ProviderKind::Spotify, &new_token)?;
             }
 
             *self.token.lock().await = Some(new_token.clone());

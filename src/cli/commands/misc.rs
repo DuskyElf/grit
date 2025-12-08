@@ -5,12 +5,12 @@ use anyhow::{bail, Context, Result};
 
 use crate::state::snapshot;
 
-pub async fn list(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn list(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
@@ -38,12 +38,12 @@ pub async fn list(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub async fn find(query: &str, playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+pub async fn find(query: &str, playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
 
-    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'plr init' first.");
+        bail!("Playlist not initialized. Run 'gritinit' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
@@ -91,11 +91,11 @@ pub async fn find(query: &str, playlist: Option<&str>, plr_dir: &Path) -> Result
     Ok(())
 }
 
-pub async fn playlists(query: Option<&str>, plr_dir: &Path) -> Result<()> {
-    let playlists_dir = plr_dir.join("playlists");
+pub async fn playlists(query: Option<&str>, grit_dir: &Path) -> Result<()> {
+    let playlists_dir = grit_dir.join("playlists");
 
     if !playlists_dir.exists() {
-        println!("No playlists tracked yet. Use 'plr init <playlist-id>' to start tracking.");
+        println!("No playlists tracked yet. Use 'gritinit <playlist-id>' to start tracking.");
         return Ok(());
     }
 
@@ -114,7 +114,7 @@ pub async fn playlists(query: Option<&str>, plr_dir: &Path) -> Result<()> {
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
 
-            let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+            let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
             if snapshot_path.exists() {
                 match snapshot::load(&snapshot_path) {
                     Ok(snapshot) => {
@@ -129,7 +129,7 @@ pub async fn playlists(query: Option<&str>, plr_dir: &Path) -> Result<()> {
     }
 
     if playlists_info.is_empty() {
-        println!("No playlists tracked yet. Use 'plr init <playlist-id>' to start tracking.");
+        println!("No playlists tracked yet. Use 'gritinit <playlist-id>' to start tracking.");
         return Ok(());
     }
 
@@ -157,11 +157,7 @@ pub async fn playlists(query: Option<&str>, plr_dir: &Path) -> Result<()> {
     }
 
     if let Some(q) = query {
-        println!(
-            "\nFound {} playlist(s) matching '{}':\n",
-            filtered.len(),
-            q
-        );
+        println!("\nFound {} playlist(s) matching '{}':\n", filtered.len(), q);
     } else {
         println!("\nLocally tracked playlists ({}):\n", filtered.len());
     }
