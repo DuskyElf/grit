@@ -1,7 +1,7 @@
 use crate::provider::Track;
 
 #[derive(Debug, Clone)]
-pub enum PlaybackEven {
+pub enum PlaybackEvent {
     Play(Track),
     Pause,
     Resume,
