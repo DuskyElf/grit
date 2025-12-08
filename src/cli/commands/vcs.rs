@@ -361,3 +361,63 @@ pub async fn revert(hash: Option<&str>, playlist: Option<&str>, plr_dir: &Path) 
 
     Ok(())
 }
+
+pub async fn apply(file_path: &str, playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+    // Load the snapshot from YAML file
+    let file_content = std::fs::read_to_string(file_path)
+        .with_context(|| format!("Failed to read file: {}", file_path))?;
+
+    let snapshot: crate::provider::PlaylistSnapshot = serde_yaml::from_str(&file_content)
+        .with_context(|| "Failed to parse YAML file as PlaylistSnapshot")?;
+
+    let playlist_id = playlist.unwrap_or(&snapshot.id);
+
+    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    if !snapshot_path.exists() {
+        bail!("Playlist {} not initialized. Run 'plr init' first.", playlist_id);
+    }
+
+    // Load current snapshot to check provider compatibility
+    let current_snapshot = snapshot::load(&snapshot_path)?;
+    if current_snapshot.provider != snapshot.provider {
+        bail!(
+            "Provider mismatch: playlist is {:?} but file contains {:?} snapshot",
+            current_snapshot.provider,
+            snapshot.provider
+        );
+    }
+
+    // Check for uncommitted staged changes
+    let staged = load_staged(plr_dir, playlist_id)?;
+    if !staged.changes.is_empty() {
+        bail!(
+            "You have {} uncommitted staged change(s). Commit or reset before applying.",
+            staged.changes.len()
+        );
+    }
+
+    // Compute hash and save snapshot
+    let hash = snapshot::compute_hash(&snapshot)?;
+    snapshot::save(&snapshot, &snapshot_path)?;
+    snapshot::save_by_hash(&snapshot, &hash, plr_dir, playlist_id)?;
+
+    // Record in journal
+    let journal_path = JournalEntry::journal_path(plr_dir, playlist_id);
+    let entry = JournalEntry::new_with_message(
+        Operation::Apply,
+        hash.clone(),
+        0,
+        0,
+        0,
+        format!("Applied from {}", file_path),
+    );
+    JournalEntry::append(&journal_path, &entry)?;
+
+    println!("\nApplied playlist state from file!");
+    println!("  Playlist: {}", snapshot.name);
+    println!("  Tracks: {}", snapshot.tracks.len());
+    println!("  Hash: [{}]", hash);
+    println!("\nUse 'plr push' to sync with remote if desired.");
+
+    Ok(())
+}

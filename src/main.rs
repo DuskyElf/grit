@@ -104,6 +104,9 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
         }
+        Commands::Apply { file } => {
+            cli::commands::vcs::apply(&file, cli.playlist.as_deref(), &plr_dir).await?;
+        }
 
         _ => {
             println!("{:?}", cli.command);
