@@ -109,9 +109,13 @@ async fn main() -> anyhow::Result<()> {
         Commands::Apply { file } => {
             cli::commands::vcs::apply(&file, cli.playlist.as_deref(), &grit_dir).await?;
         }
-
-        _ => {
-            println!("{:?}", cli.command);
+        Commands::Play { playlist, shuffle } => {
+            cli::commands::play::run(
+                playlist.as_deref().or(cli.playlist.as_deref()),
+                shuffle,
+                &grit_dir,
+            )
+            .await?;
         }
     }
 

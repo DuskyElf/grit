@@ -53,7 +53,9 @@ mod unix {
                 .args([
                     "--idle",
                     "--no-video",
-                    "--no-terminal",
+                    "--ytdl",
+                    "--no-terminal",           // Disable mpv's terminal input/output
+                    "--really-quiet",          // Suppress all messages
                     &format!("--input-ipc-server={}", socket_path.display()),
                 ])
                 .stdin(Stdio::null())
