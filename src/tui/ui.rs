@@ -161,21 +161,24 @@ fn draw_progress(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_next_up(frame: &mut Frame, app: &App, area: Rect) {
-    let (title, artists) = app
-        .next_track()
-        .map(|t| (t.name.clone(), t.artists.join(", ")))
-        .unwrap_or(("—".into(), String::new()));
+    let content = if app.shuffle {
+        vec![
+            Line::from(Span::styled("shuffle", Style::default().fg(SAKURA_PINK))),
+            Line::from(""),
+            Line::from(Span::styled("next track is random", Style::default().fg(SAKURA_DIM))),
+        ]
+    } else {
+        let (title, artists) = app
+            .next_track()
+            .map(|t| (t.name.clone(), t.artists.join(", ")))
+            .unwrap_or(("—".into(), String::new()));
 
-    let shuffle_indicator = if app.shuffle { " 🔀" } else { "" };
-
-    let content = vec![
-        Line::from(vec![
-            Span::styled("next up", Style::default().fg(SAKURA_DIM)),
-            Span::styled(shuffle_indicator, Style::default().fg(SAKURA_PINK)),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled(format!("{} - {}", title, artists), Style::default().fg(SAKURA_DIM))),
-    ];
+        vec![
+            Line::from(Span::styled("next up", Style::default().fg(SAKURA_DIM))),
+            Line::from(""),
+            Line::from(Span::styled(format!("{} - {}", title, artists), Style::default().fg(SAKURA_DIM))),
+        ]
+    };
 
     frame.render_widget(Paragraph::new(content), area);
 }
