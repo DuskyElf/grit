@@ -61,6 +61,7 @@ struct TokenResponse {
 #[derive(Debug, Deserialize)]
 struct CurrentlyPlaying {
     item: Option<PlayingItem>,
+    #[allow(dead_code)]
     is_playing: bool,
 }
 
@@ -73,6 +74,27 @@ struct PlayingItem {
 #[derive(Debug, Deserialize)]
 struct PlayingArtist {
     name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SpotifyError {
+    error: SpotifyErrorDetails,
+}
+
+#[derive(Debug, Deserialize)]
+struct SpotifyErrorDetails {
+    #[allow(dead_code)]
+    status: u16,
+    message: String,
+}
+
+/// Parse Spotify API error response into a clean message
+fn parse_spotify_error(text: &str) -> String {
+    if let Ok(err) = serde_json::from_str::<SpotifyError>(text) {
+        err.error.message
+    } else {
+        text.trim().to_string()
+    }
 }
 
 impl SpotifyPlayer {
@@ -242,9 +264,8 @@ impl SpotifyPlayer {
             .await?;
 
         if !resp.status().is_success() {
-            let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            bail!("Spotify play failed ({}): {}", status, text);
+            bail!("{}", parse_spotify_error(&text));
         }
 
         Ok(())
@@ -267,10 +288,10 @@ impl SpotifyPlayer {
             .send()
             .await?;
 
+        // 403 = already paused, ignore
         if !resp.status().is_success() && resp.status().as_u16() != 403 {
-            // 403 = already paused, ignore
             let text = resp.text().await.unwrap_or_default();
-            bail!("Pause failed: {}", text);
+            bail!("{}", parse_spotify_error(&text));
         }
         Ok(())
     }
@@ -289,7 +310,7 @@ impl SpotifyPlayer {
 
         if !resp.status().is_success() && resp.status().as_u16() != 403 {
             let text = resp.text().await.unwrap_or_default();
-            bail!("Resume failed: {}", text);
+            bail!("{}", parse_spotify_error(&text));
         }
         Ok(())
     }
@@ -308,7 +329,7 @@ impl SpotifyPlayer {
 
         if !resp.status().is_success() {
             let text = resp.text().await.unwrap_or_default();
-            bail!("Next failed: {}", text);
+            bail!("{}", parse_spotify_error(&text));
         }
         Ok(())
     }
@@ -327,7 +348,7 @@ impl SpotifyPlayer {
 
         if !resp.status().is_success() {
             let text = resp.text().await.unwrap_or_default();
-            bail!("Previous failed: {}", text);
+            bail!("{}", parse_spotify_error(&text));
         }
         Ok(())
     }
@@ -368,7 +389,7 @@ impl SpotifyPlayer {
 
         if !resp.status().is_success() {
             let text = resp.text().await.unwrap_or_default();
-            bail!("Shuffle failed: {}", text);
+            bail!("{}", parse_spotify_error(&text));
         }
         Ok(())
     }
