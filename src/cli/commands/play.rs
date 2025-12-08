@@ -151,6 +151,28 @@ async fn play_spotify(
                         }
                     }
                 }
+                KeyCode::Up => {
+                    app.select_prev();
+                }
+                KeyCode::Down => {
+                    app.select_next();
+                }
+                KeyCode::Enter => {
+                    let idx = app.selected_index;
+                    if idx != app.current_index && idx < app.tracks.len() {
+                        // Jump to selected track by replaying context with offset
+                        let uris: Vec<String> = app.tracks.iter()
+                            .map(|t| format!("spotify:track:{}", t.id))
+                            .collect();
+                        if let Err(e) = player.play(uris, idx).await {
+                            app.set_error(e.to_string());
+                        } else {
+                            app.current_index = idx;
+                            app.position_secs = 0.0;
+                            app.duration_secs = app.tracks[idx].duration_ms as f64 / 1000.0;
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -276,6 +298,35 @@ async fn play_mpv(
                 }
                 KeyCode::Right => {
                     let _ = player.seek(5).await;
+                }
+                KeyCode::Up => {
+                    app.select_prev();
+                }
+                KeyCode::Down => {
+                    app.select_next();
+                }
+                KeyCode::Enter => {
+                    let idx = app.selected_index;
+                    if idx != app.current_index && idx < app.tracks.len() {
+                        if let Some(track) = app.tracks.get(idx).cloned() {
+                            app.loading = true;
+                            app.current_index = idx;
+                            app.position_secs = 0.0;
+                            app.duration_secs = track.duration_ms as f64 / 1000.0;
+                            queue.jump_to(idx);
+                            tui.draw(&app)?;
+                            match provider.playable_url(&track).await {
+                                Ok(url) => {
+                                    if let Err(e) = player.load(&url).await {
+                                        app.set_error(e.to_string());
+                                    }
+                                }
+                                Err(e) => app.set_error(e.to_string()),
+                            }
+                            app.loading = false;
+                            skip_position = 5;
+                        }
+                    }
                 }
                 _ => {}
             }

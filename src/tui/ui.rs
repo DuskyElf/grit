@@ -10,7 +10,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, Paragraph},
+    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
     Frame, Terminal,
 };
 
@@ -78,9 +78,20 @@ fn render(frame: &mut Frame, app: &App) {
         area,
     );
 
-    let chunks = Layout::default()
+    // Split horizontally: player (left) and playlist (right)
+    let main_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .margin(1)
+        .constraints([
+            Constraint::Percentage(60),
+            Constraint::Percentage(40),
+        ])
+        .split(area);
+
+    // Left side: player controls
+    let left_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .margin(2)
+        .margin(1)
         .constraints([
             Constraint::Length(3),
             Constraint::Length(5),
@@ -89,14 +100,16 @@ fn render(frame: &mut Frame, app: &App) {
             Constraint::Min(0),
             Constraint::Length(3),
         ])
-        .split(area);
+        .split(main_chunks[0]);
 
-    draw_header(frame, app, chunks[0]);
-    draw_now_playing(frame, app, chunks[1]);
-    draw_progress(frame, app, chunks[2]);
-    draw_next_up(frame, app, chunks[3]);
-    draw_sakura(frame, chunks[4]);
-    draw_controls(frame, app, chunks[5]);
+    draw_header(frame, app, left_chunks[0]);
+    draw_now_playing(frame, app, left_chunks[1]);
+    draw_progress(frame, app, left_chunks[2]);
+    draw_next_up(frame, app, left_chunks[3]);
+    draw_controls(frame, app, left_chunks[5]);
+
+    // Right side: playlist
+    draw_playlist(frame, app, main_chunks[1]);
 }
 
 fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -183,15 +196,52 @@ fn draw_next_up(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(content), area);
 }
 
-fn draw_sakura(frame: &mut Frame, area: Rect) {
-    if area.height < 2 {
-        return;
-    }
+fn draw_playlist(frame: &mut Frame, app: &App, area: Rect) {
+    let visible_height = area.height.saturating_sub(2) as usize; // Account for border
 
-    // Empty decorative space - sakura theme colors fill the background
+    // Calculate scroll offset to keep selected item visible
+    let scroll_offset = if app.selected_index >= visible_height {
+        app.selected_index - visible_height + 1
+    } else {
+        0
+    };
+
+    let items: Vec<ListItem> = app
+        .tracks
+        .iter()
+        .enumerate()
+        .skip(scroll_offset)
+        .take(visible_height)
+        .map(|(i, track)| {
+            let is_current = i == app.current_index;
+            let is_selected = i == app.selected_index;
+
+            let prefix = if is_current { "▶ " } else { "  " };
+            let name = if track.name.len() > 25 {
+                format!("{}...", &track.name[..22])
+            } else {
+                track.name.clone()
+            };
+
+            let style = if is_selected {
+                Style::default().fg(SAKURA_BG).bg(SAKURA_PINK)
+            } else if is_current {
+                Style::default().fg(SAKURA_DEEP).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(SAKURA_FG)
+            };
+
+            ListItem::new(format!("{}{}", prefix, name)).style(style)
+        })
+        .collect();
+
     let block = Block::default()
-        .style(Style::default().bg(SAKURA_BG));
-    frame.render_widget(block, area);
+        .title(Span::styled(" playlist ", Style::default().fg(SAKURA_PINK)))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(SAKURA_DIM));
+
+    let list = List::new(items).block(block);
+    frame.render_widget(list, area);
 }
 
 fn draw_controls(frame: &mut Frame, app: &App, area: Rect) {
@@ -203,13 +253,13 @@ fn draw_controls(frame: &mut Frame, app: &App, area: Rect) {
 
     let controls = Line::from(vec![
         Span::styled("[space]", Style::default().fg(SAKURA_PINK)),
-        Span::styled(" pause  ", Style::default().fg(SAKURA_DIM)),
-        Span::styled("[←/→]", Style::default().fg(SAKURA_PINK)),
-        Span::styled(" seek  ", Style::default().fg(SAKURA_DIM)),
+        Span::styled(" pause ", Style::default().fg(SAKURA_DIM)),
+        Span::styled("[↑/↓]", Style::default().fg(SAKURA_PINK)),
+        Span::styled(" select ", Style::default().fg(SAKURA_DIM)),
+        Span::styled("[enter]", Style::default().fg(SAKURA_PINK)),
+        Span::styled(" play ", Style::default().fg(SAKURA_DIM)),
         Span::styled("[n/p]", Style::default().fg(SAKURA_PINK)),
-        Span::styled(" track  ", Style::default().fg(SAKURA_DIM)),
-        Span::styled("[s]", Style::default().fg(SAKURA_PINK)),
-        Span::styled(" shuffle  ", Style::default().fg(SAKURA_DIM)),
+        Span::styled(" skip ", Style::default().fg(SAKURA_DIM)),
         Span::styled("[q]", Style::default().fg(SAKURA_PINK)),
         Span::styled(" quit", Style::default().fg(SAKURA_DIM)),
     ]);

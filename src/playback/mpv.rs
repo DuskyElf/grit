@@ -94,7 +94,8 @@ mod unix {
             // Spawn mpv in idle mode
             let process = Command::new("mpv")
                 .args([
-                    "--idle",
+                    "--idle=yes",
+                    "--keep-open=yes",         // Don't quit on errors or end of file
                     "--no-video",
                     "--ytdl",
                     "--no-terminal",           // Disable mpv's terminal input/output

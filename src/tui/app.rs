@@ -9,6 +9,7 @@ pub struct App {
     pub playlist_name: String,
     pub tracks: Vec<Track>,
     pub current_index: usize,
+    pub selected_index: usize, // For playlist navigation
     pub is_paused: bool,
     pub shuffle: bool,
     pub position_secs: f64,
@@ -25,6 +26,7 @@ impl App {
             playlist_name,
             tracks,
             current_index: 0,
+            selected_index: 0,
             is_paused: false,
             shuffle: false,
             position_secs: 0.0,
@@ -63,5 +65,19 @@ impl App {
 
     pub fn clear_error(&mut self) {
         self.error = None;
+    }
+
+    pub fn select_next(&mut self) {
+        if self.selected_index < self.tracks.len().saturating_sub(1) {
+            self.selected_index += 1;
+        }
+    }
+
+    pub fn select_prev(&mut self) {
+        self.selected_index = self.selected_index.saturating_sub(1);
+    }
+
+    pub fn selected_track(&self) -> Option<&Track> {
+        self.tracks.get(self.selected_index)
     }
 }
