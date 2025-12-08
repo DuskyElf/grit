@@ -58,14 +58,29 @@ async fn play_spotify(
     app.shuffle = shuffle;
 
     let mut tui = Tui::new()?;
+    let mut poll_counter = 0u8;
 
     loop {
         tui.draw(&app)?;
 
         if !app.is_paused {
-            app.position_secs += 0.1;
-            if app.position_secs >= app.duration_secs && app.duration_secs > 0.0 {
-                app.position_secs = 0.0;
+            app.position_secs = (app.position_secs + 0.1).min(app.duration_secs);
+
+            // Poll Spotify every ~3 seconds OR when track should have ended
+            poll_counter = poll_counter.wrapping_add(1);
+            let should_poll = poll_counter % 30 == 0
+                || (app.position_secs >= app.duration_secs && app.duration_secs > 0.0);
+
+            if should_poll {
+                if let Ok(Some((name, _))) = player.get_currently_playing().await {
+                    if app.current_track().map(|t| &t.name) != Some(&name) {
+                        if let Some(idx) = app.tracks.iter().position(|t| t.name == name) {
+                            app.current_index = idx;
+                            app.position_secs = 0.0;
+                            app.duration_secs = app.tracks[idx].duration_ms as f64 / 1000.0;
+                        }
+                    }
+                }
             }
         }
 
@@ -165,24 +180,32 @@ async fn play_mpv(
     let mut app = App::new(snap.name.clone(), snap.tracks.clone(), PlayerBackend::Mpv);
     app.shuffle = shuffle;
     app.loading = true;
+    let mut skip_position = 0u8; // Skip position queries after track change
 
     let mut tui = Tui::new()?;
     tui.draw(&app)?;
 
-    if let Some(track) = queue.current_track() {
-        let url = provider.playable_url(track).await?;
+    if let Some(track) = queue.current_track().cloned() {
+        let url = provider.playable_url(&track).await?;
         player.load(&url).await?;
         app.duration_secs = track.duration_ms as f64 / 1000.0;
+        // Find actual index in tracks list
+        if let Some(idx) = app.tracks.iter().position(|t| t.id == track.id) {
+            app.current_index = idx;
+        }
+        skip_position = 5; // Skip first few position queries
     }
     app.loading = false;
 
     loop {
         tui.draw(&app)?;
 
-        if !app.is_paused {
+        if !app.is_paused && skip_position == 0 {
             if let Ok(Some(pos)) = player.get_position().await {
-                app.position_secs = pos;
+                app.position_secs = pos.min(app.duration_secs);
             }
+        } else if skip_position > 0 {
+            skip_position -= 1;
         }
 
         if let Some(key) = tui.poll_key()? {
@@ -203,41 +226,45 @@ async fn play_mpv(
                 KeyCode::Char('n') => {
                     if let Some(track) = queue.next().cloned() {
                         app.loading = true;
-                        app.current_index = queue.position();
+                        // Find actual index in tracks list and update immediately
+                        if let Some(idx) = app.tracks.iter().position(|t| t.id == track.id) {
+                            app.current_index = idx;
+                        }
+                        app.position_secs = 0.0;
+                        app.duration_secs = track.duration_ms as f64 / 1000.0;
                         tui.draw(&app)?;
-                        let duration = track.duration_ms as f64 / 1000.0;
                         match provider.playable_url(&track).await {
                             Ok(url) => {
                                 if let Err(e) = player.load(&url).await {
                                     app.set_error(e.to_string());
-                                } else {
-                                    app.position_secs = 0.0;
-                                    app.duration_secs = duration;
                                 }
                             }
                             Err(e) => app.set_error(e.to_string()),
                         }
                         app.loading = false;
+                        skip_position = 5;
                     }
                 }
                 KeyCode::Char('p') => {
                     if let Some(track) = queue.previous().cloned() {
                         app.loading = true;
-                        app.current_index = queue.position();
+                        // Find actual index in tracks list and update immediately
+                        if let Some(idx) = app.tracks.iter().position(|t| t.id == track.id) {
+                            app.current_index = idx;
+                        }
+                        app.position_secs = 0.0;
+                        app.duration_secs = track.duration_ms as f64 / 1000.0;
                         tui.draw(&app)?;
-                        let duration = track.duration_ms as f64 / 1000.0;
                         match provider.playable_url(&track).await {
                             Ok(url) => {
                                 if let Err(e) = player.load(&url).await {
                                     app.set_error(e.to_string());
-                                } else {
-                                    app.position_secs = 0.0;
-                                    app.duration_secs = duration;
                                 }
                             }
                             Err(e) => app.set_error(e.to_string()),
                         }
                         app.loading = false;
+                        skip_position = 5;
                     }
                 }
                 KeyCode::Char('s') => {
@@ -259,15 +286,19 @@ async fn play_mpv(
             if MpvPlayer::is_track_finished(&event) {
                 if let Some(track) = queue.next().cloned() {
                     app.loading = true;
-                    app.current_index = queue.position();
+                    // Find actual index in tracks list and update immediately
+                    if let Some(idx) = app.tracks.iter().position(|t| t.id == track.id) {
+                        app.current_index = idx;
+                    }
+                    app.position_secs = 0.0;
+                    app.duration_secs = track.duration_ms as f64 / 1000.0;
                     tui.draw(&app)?;
-                    let duration = track.duration_ms as f64 / 1000.0;
                     if let Ok(url) = provider.playable_url(&track).await {
                         let _ = player.load(&url).await;
-                        app.position_secs = 0.0;
-                        app.duration_secs = duration;
                     }
                     app.loading = false;
+                    skip_position = 5;
+                    tui.draw(&app)?;
                 }
             }
         }
