@@ -75,3 +75,51 @@ pub async fn push(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
 
     Ok(())
 }
+
+pub async fn log(playlist: Option<&str>, plr_dir: &Path) -> Result<()> {
+    let playlist_id = playlist.context("Playlist required (use --playlist")?;
+
+    let snapshot_path = snapshot::snapshot_path(plr_dir, playlist_id);
+    if !snapshot_path.exists() {
+        bail!("Playlist not initialized. Run 'plr init' first.");
+    }
+
+    let journal_path = JournalEntry::journal_path(plr_dir, playlist_id);
+    let entries = JournalEntry::read_all(&journal_path)?;
+
+    if entries.is_empty() {
+        println!("No history yet.");
+        return Ok(());
+    }
+
+    println!("\nCommit History:\n");
+
+    for entry in entries.iter().rev() {
+        let hash_short = &entry.snapshot_hash[..8.min(entry.snapshot_hash.len())];
+        let timestamp = entry.timestamp.format("%Y-%m-%d %H:%M:%S");
+
+        let operation_str = match entry.operation {
+            Operation::Init => "init",
+            Operation::Pull => "pull",
+            Operation::Push => "push",
+            Operation::Apply => "apply",
+            Operation::Commit => "commit",
+        };
+
+        let changes = format!("+{} -{} ~{}", entry.added, entry.removed, entry.moved);
+
+        if let Some(msg) = &entry.message {
+            println!(
+                "[{}] {} | {} | {}",
+                hash_short, timestamp, operation_str, msg
+            );
+        } else {
+            println!("[{}] {} | {}", hash_short, timestamp, operation_str);
+        }
+
+        println!("  {}", changes);
+        println!();
+    }
+
+    Ok(())
+}
