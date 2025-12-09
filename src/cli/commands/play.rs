@@ -70,7 +70,6 @@ async fn play_spotify(
             last_update = now;
             app.position_secs = (app.position_secs + elapsed).min(app.duration_secs);
 
-            // Poll Spotify every ~3 seconds OR when track should have ended
             poll_counter = poll_counter.wrapping_add(1);
             let should_poll = poll_counter % 30 == 0
                 || (app.position_secs >= app.duration_secs && app.duration_secs > 0.0);
@@ -81,7 +80,6 @@ async fn play_spotify(
                 if let Ok(Some((name, _))) = player.get_currently_playing().await {
                     if app.current_track().map(|t| &t.name) != Some(&name) {
                         if let Some(idx) = app.tracks.iter().position(|t| t.name == name) {
-                            // Handle repeat one - force back to current track
                             if app.repeat_mode == RepeatMode::One {
                                 let current_idx = app.current_index;
                                 let uris: Vec<String> = app.tracks.iter()
@@ -97,7 +95,6 @@ async fn play_spotify(
                         }
                     }
                 } else if app.repeat_mode == RepeatMode::All && app.current_index == app.tracks.len() - 1 {
-                    // Nothing playing and we were at the last track - restart playlist
                     let uris: Vec<String> = app.tracks.iter()
                         .map(|t| format!("spotify:track:{}", t.id))
                         .collect();
@@ -191,7 +188,6 @@ async fn play_spotify(
                 KeyCode::Enter => {
                     let idx = app.selected_index;
                     if idx != app.current_index && idx < app.tracks.len() {
-                        // Jump to selected track by replaying context with offset
                         let uris: Vec<String> = app.tracks.iter()
                             .map(|t| format!("spotify:track:{}", t.id))
                             .collect();
@@ -234,8 +230,8 @@ async fn play_mpv(
     let mut app = App::new(snap.name.clone(), snap.tracks.clone(), PlayerBackend::Mpv);
     app.shuffle = shuffle;
     app.loading = true;
-    let mut skip_position = 0u8; // Skip position queries right after track change
-    let mut last_seek = std::time::Instant::now(); // Track last seek to prevent rapid seeks
+    let mut skip_position = 0u8;
+    let mut last_seek = std::time::Instant::now();
 
     let mut tui = Tui::new()?;
     tui.draw(&app)?;
@@ -253,11 +249,10 @@ async fn play_mpv(
             }
         }
         app.duration_secs = track.duration_ms as f64 / 1000.0;
-        // Find actual index in tracks list
         if let Some(idx) = app.tracks.iter().position(|t| t.id == track.id) {
             app.current_index = idx;
         }
-        skip_position = 5; // Skip first few position queries
+        skip_position = 5;
     }
     app.loading = false;
 
@@ -293,7 +288,6 @@ async fn play_mpv(
                     let track = match queue.next() {
                         Some(track) => Some(track.clone()),
                         None if app.repeat_mode == RepeatMode::All => {
-                            // Reached end of playlist, wrap to beginning
                             queue.jump_to(0);
                             queue.current_track().cloned()
                         }
@@ -302,7 +296,6 @@ async fn play_mpv(
 
                     if let Some(track) = track {
                         app.loading = true;
-                        // Find actual index in tracks list and update immediately
                         if let Some(idx) = app.tracks.iter().position(|t| t.id == track.id) {
                             app.current_index = idx;
                         }
@@ -312,7 +305,6 @@ async fn play_mpv(
                         match provider.playable_url(&track).await {
                             Ok(yt_url) => match fetch_audio_url(&yt_url).await {
                                 Ok(audio_url) => {
-                                    // Clear stale events before loading
                                     while player.try_recv_event().is_some() {}
                                     if let Err(e) = player.load(&audio_url).await {
                                         app.set_error(e.to_string());
@@ -329,7 +321,6 @@ async fn play_mpv(
                 KeyCode::Char('p') => {
                     if let Some(track) = queue.previous().cloned() {
                         app.loading = true;
-                        // Find actual index in tracks list and update immediately
                         if let Some(idx) = app.tracks.iter().position(|t| t.id == track.id) {
                             app.current_index = idx;
                         }
@@ -339,7 +330,6 @@ async fn play_mpv(
                         match provider.playable_url(&track).await {
                             Ok(yt_url) => match fetch_audio_url(&yt_url).await {
                                 Ok(audio_url) => {
-                                    // Clear stale events before loading
                                     while player.try_recv_event().is_some() {}
                                     if let Err(e) = player.load(&audio_url).await {
                                         app.set_error(e.to_string());
@@ -358,12 +348,9 @@ async fn play_mpv(
                     app.shuffle = !app.shuffle;
                 }
                 KeyCode::Char('r') => {
-                    // Only update app repeat mode, not queue
-                    // Queue stays in None mode so manual navigation always works
                     app.cycle_repeat();
                 }
                 KeyCode::Left => {
-                    // Debounce seeks to prevent overwhelming MPV
                     let now = std::time::Instant::now();
                     if now.duration_since(last_seek).as_millis() >= 150 {
                         if let Err(e) = player.seek(-5).await {
@@ -376,7 +363,6 @@ async fn play_mpv(
                     }
                 }
                 KeyCode::Right => {
-                    // Debounce seeks to prevent overwhelming MPV
                     let now = std::time::Instant::now();
                     if now.duration_since(last_seek).as_millis() >= 150 {
                         if let Err(e) = player.seek(5).await {
@@ -407,7 +393,6 @@ async fn play_mpv(
                             match provider.playable_url(&track).await {
                                 Ok(yt_url) => match fetch_audio_url(&yt_url).await {
                                     Ok(audio_url) => {
-                                        // Clear stale events before loading
                                         while player.try_recv_event().is_some() {}
                                         if let Err(e) = player.load(&audio_url).await {
                                             app.set_error(e.to_string());
@@ -426,19 +411,16 @@ async fn play_mpv(
             }
         }
 
-        // Check for track end and auto-advance
         while let Some(event) = player.try_recv_event() {
             if MpvPlayer::is_track_finished(&event) {
                 use crate::playback::events::RepeatMode;
 
-                // In repeat one mode, replay current track instead of advancing
                 let track = if app.repeat_mode == RepeatMode::One {
                     queue.current_track().cloned()
                 } else {
                     match queue.next() {
                         Some(track) => Some(track.clone()),
                         None if app.repeat_mode == RepeatMode::All => {
-                            // Reached end of playlist, wrap to beginning
                             queue.jump_to(0);
                             queue.current_track().cloned()
                         }
@@ -448,7 +430,6 @@ async fn play_mpv(
 
                 if let Some(track) = track {
                     app.loading = true;
-                    // Find actual index in tracks list and update immediately
                     if let Some(idx) = app.tracks.iter().position(|t| t.id == track.id) {
                         app.current_index = idx;
                     }
@@ -459,7 +440,6 @@ async fn play_mpv(
                     if let Ok(yt_url) = provider.playable_url(&track).await {
                         match fetch_audio_url(&yt_url).await {
                             Ok(audio_url) => {
-                                // Clear all stale events before loading to ensure clean state
                                 while player.try_recv_event().is_some() {}
                                 if let Err(e) = player.load(&audio_url).await {
                                     app.set_error(e.to_string());
