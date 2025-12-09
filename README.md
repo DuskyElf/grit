@@ -66,10 +66,10 @@ cargo install --git https://github.com/pixperk/grit
 
 ```bash
 # Run directly (compiles from source, includes dependencies)
-nix run github:pixperk/grit
+nix run github:duskyelf/grit
 
 # Or install to profile
-nix profile install github:pixperk/grit
+nix profile install github:duskyelf/grit
 ```
 
 ### Environment Variables
