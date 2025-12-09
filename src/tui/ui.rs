@@ -19,6 +19,9 @@ use super::App;
 const SAKURA_PINK: Color = Color::Rgb(255, 183, 197);
 const SAKURA_DEEP: Color = Color::Rgb(255, 105, 180);
 const SAKURA_SOFT: Color = Color::Rgb(255, 218, 233);
+const SEA_GREEN: Color = Color::Rgb(95, 158, 160);
+const SEA_GREEN_BRIGHT: Color = Color::Rgb(120, 190, 192);
+const SEA_GREEN_DIM: Color = Color::Rgb(75, 125, 127);
 const SAKURA_BG: Color = Color::Rgb(30, 30, 35);
 const SAKURA_FG: Color = Color::Rgb(240, 240, 245);
 const SAKURA_DIM: Color = Color::Rgb(120, 120, 130);
@@ -126,7 +129,7 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
         "▶"
     };
 
-    let status_color = if app.loading { SAKURA_SOFT } else { SAKURA_DEEP };
+    let status_color = if app.loading { SAKURA_SOFT } else { SEA_GREEN };
 
     let header = Line::from(vec![
         Span::styled("grit ", Style::default().fg(SAKURA_PINK).add_modifier(Modifier::BOLD)),
@@ -148,9 +151,9 @@ fn draw_now_playing(frame: &mut Frame, app: &App, area: Rect) {
     let content = if app.loading {
         vec![
             Line::from(""),
-            Line::from(Span::styled("loading...", Style::default().fg(SAKURA_PINK).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled("loading...", Style::default().fg(SEA_GREEN).add_modifier(Modifier::BOLD))),
             Line::from(""),
-            Line::from(Span::styled("fetching track", Style::default().fg(SAKURA_DIM))),
+            Line::from(Span::styled("fetching track", Style::default().fg(SEA_GREEN_DIM))),
         ]
     } else if let Some(error) = &app.error {
         vec![
@@ -166,10 +169,10 @@ fn draw_now_playing(frame: &mut Frame, app: &App, area: Rect) {
             .unwrap_or(("Nothing playing".into(), String::new()));
 
         vec![
-            Line::from(Span::styled("now playing", Style::default().fg(SAKURA_DIM))),
+            Line::from(Span::styled("now playing", Style::default().fg(SEA_GREEN_DIM))),
             Line::from(""),
             Line::from(Span::styled(title, Style::default().fg(SAKURA_FG).add_modifier(Modifier::BOLD))),
-            Line::from(Span::styled(artists, Style::default().fg(SAKURA_SOFT))),
+            Line::from(Span::styled(artists, Style::default().fg(SEA_GREEN_BRIGHT))),
         ]
     };
 
@@ -190,7 +193,7 @@ fn draw_progress(frame: &mut Frame, app: &App, area: Rect) {
         let label = format!("{} / {}", pos, dur);
 
         let gauge = Gauge::default()
-            .gauge_style(Style::default().fg(SAKURA_DEEP).bg(Color::Rgb(50, 50, 55)))
+            .gauge_style(Style::default().fg(SEA_GREEN).bg(Color::Rgb(50, 50, 55)))
             .ratio(app.progress())
             .label(Span::styled(label, Style::default().fg(SAKURA_FG)));
 
@@ -209,11 +212,11 @@ fn draw_next_up(frame: &mut Frame, app: &App, area: Rect) {
         };
         vec![
             Line::from(vec![
-                Span::styled("shuffle", Style::default().fg(SAKURA_PINK)),
-                Span::styled(repeat_text, Style::default().fg(SAKURA_PINK)),
+                Span::styled("shuffle", Style::default().fg(SEA_GREEN)),
+                Span::styled(repeat_text, Style::default().fg(SEA_GREEN)),
             ]),
             Line::from(""),
-            Line::from(Span::styled("next track is random", Style::default().fg(SAKURA_DIM))),
+            Line::from(Span::styled("next track is random", Style::default().fg(SEA_GREEN_DIM))),
         ]
     } else if app.repeat_mode == RepeatMode::One {
         let (title, artists) = app
@@ -222,9 +225,9 @@ fn draw_next_up(frame: &mut Frame, app: &App, area: Rect) {
             .unwrap_or(("—".into(), String::new()));
 
         vec![
-            Line::from(Span::styled("repeat one", Style::default().fg(SAKURA_PINK))),
+            Line::from(Span::styled("repeat one", Style::default().fg(SEA_GREEN))),
             Line::from(""),
-            Line::from(Span::styled(format!("{} - {}", title, artists), Style::default().fg(SAKURA_DIM))),
+            Line::from(Span::styled(format!("{} - {}", title, artists), Style::default().fg(SEA_GREEN_DIM))),
         ]
     } else {
         let (title, artists) = app
@@ -278,7 +281,7 @@ fn draw_playlist(frame: &mut Frame, app: &App, area: Rect) {
             let style = if is_selected {
                 Style::default().fg(SAKURA_BG).bg(SAKURA_PINK)
             } else if is_current {
-                Style::default().fg(SAKURA_DEEP).add_modifier(Modifier::BOLD)
+                Style::default().fg(SEA_GREEN_BRIGHT).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(SAKURA_FG)
             };
