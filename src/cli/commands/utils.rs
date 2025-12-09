@@ -9,7 +9,7 @@ use crate::{
 
 pub fn create_provider(provider_kind: ProviderKind, grit_dir: &Path) -> Result<Box<dyn Provider>> {
     let token = credentials::load(grit_dir, provider_kind)?
-        .context("No credentials found. Please run 'gritauth <provider>' first.")?;
+        .context("No credentials found. Please run 'grit auth <provider>' first.")?;
 
     let provider: Box<dyn Provider> = match provider_kind {
         ProviderKind::Spotify => {

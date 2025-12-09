@@ -10,7 +10,7 @@ pub async fn list(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
 
     let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'gritinit' first.");
+        bail!("Playlist not initialized. Run 'grit init' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
@@ -43,7 +43,7 @@ pub async fn find(query: &str, playlist: Option<&str>, grit_dir: &Path) -> Resul
 
     let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'gritinit' first.");
+        bail!("Playlist not initialized. Run 'grit init' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
@@ -95,7 +95,7 @@ pub async fn playlists(query: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlists_dir = grit_dir.join("playlists");
 
     if !playlists_dir.exists() {
-        println!("No playlists tracked yet. Use 'gritinit <playlist-id>' to start tracking.");
+        println!("No playlists tracked yet. Use 'grit init <playlist-id>' to start tracking.");
         return Ok(());
     }
 
@@ -129,7 +129,7 @@ pub async fn playlists(query: Option<&str>, grit_dir: &Path) -> Result<()> {
     }
 
     if playlists_info.is_empty() {
-        println!("No playlists tracked yet. Use 'gritinit <playlist-id>' to start tracking.");
+        println!("No playlists tracked yet. Use 'grit init <playlist-id>' to start tracking.");
         return Ok(());
     }
 

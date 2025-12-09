@@ -33,13 +33,13 @@ pub async fn run(provider: ProviderKind, playlist: &str, grit_dir: &Path) -> Res
     let snapshot_path = snapshot::snapshot_path(grit_dir, &playlist_id);
     if snapshot_path.exists() {
         anyhow::bail!(
-            "Playlist {} already initialized. Use 'pull' to update.",
+            "Playlist {} already initialized. Use 'grit pull' to update.",
             playlist_id
         );
     }
 
     let token = credentials::load(grit_dir, provider)?
-        .context("No credentials found. Please run 'gritauth <provider>' first.")?;
+        .context("No credentials found. Please run 'grit auth <provider>' first.")?;
 
     let provider_impl: Box<dyn Provider> = match provider {
         ProviderKind::Spotify => {

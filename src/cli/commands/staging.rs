@@ -15,7 +15,7 @@ pub async fn status(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
 
     let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'gritinit' first.");
+        bail!("Playlist not initialized. Run 'grit init' first.");
     }
 
     let local_snapshot = snapshot::load(&snapshot_path)?;
@@ -64,8 +64,8 @@ pub async fn status(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
         }
 
         println!("\n  Summary: +{} -{} ~{}", added, removed, moved);
-        println!("\nUse 'gritcommit -m \"message\"' to commit these changes");
-        println!("Use 'gritreset' to discard staged changes");
+        println!("\nUse 'grit commit -m \"message\"' to commit these changes");
+        println!("Use 'grit reset' to discard staged changes");
     }
 
     // Compare local vs remote
@@ -99,7 +99,7 @@ pub async fn status(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
                     removed,
                     moved
                 );
-                println!("\n  Use 'gritpush' to sync with remote");
+                println!("\n  Use 'grit push' to sync with remote");
             }
         }
         Err(e) => {
@@ -163,7 +163,7 @@ pub async fn search(query: &str, provider: Option<ProviderKind>, grit_dir: &Path
         }
     }
 
-    println!("Use 'gritadd <track-id>' to stage a track for addition");
+    println!("Use 'grit add <track-id>' to stage a track for addition");
 
     Ok(())
 }
@@ -173,7 +173,7 @@ pub async fn add(track_id: &str, playlist: Option<&str>, grit_dir: &Path) -> Res
 
     let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'gritinit' first.");
+        bail!("Playlist not initialized. Run 'grit init' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
@@ -205,8 +205,8 @@ pub async fn add(track_id: &str, playlist: Option<&str>, grit_dir: &Path) -> Res
         track.artists.join(", ")
     );
     println!("  Position: {}", index);
-    println!("\nUse 'gritstatus' to see all staged changes");
-    println!("Use 'gritcommit -m \"message\"' to commit");
+    println!("\nUse 'grit status' to see all staged changes");
+    println!("Use 'grit commit -m \"message\"' to commit");
 
     Ok(())
 }
@@ -216,7 +216,7 @@ pub async fn remove(track_id: &str, playlist: Option<&str>, grit_dir: &Path) -> 
 
     let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'gritinit' first.");
+        bail!("Playlist not initialized. Run 'grit init' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
@@ -241,8 +241,8 @@ pub async fn remove(track_id: &str, playlist: Option<&str>, grit_dir: &Path) -> 
         track.artists.join(", ")
     );
     println!("  Position: {}", index);
-    println!("\nUse 'gritstatus' to see all staged changes");
-    println!("Use 'gritcommit -m \"message\"' to commit");
+    println!("\nUse 'grit status' to see all staged changes");
+    println!("Use 'grit commit -m \"message\"' to commit");
 
     Ok(())
 }
@@ -257,7 +257,7 @@ pub async fn move_track(
 
     let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'gritinit' first.");
+        bail!("Playlist not initialized. Run 'grit init' first.");
     }
 
     let snapshot = snapshot::load(&snapshot_path)?;
@@ -291,8 +291,8 @@ pub async fn move_track(
 
     println!("Staged move: {} - {}", track.name, track.artists.join(", "));
     println!("  From: {} → To: {}", from_index, new_index);
-    println!("\nUse 'gritstatus' to see all staged changes");
-    println!("Use 'gritcommit -m \"message\"' to commit");
+    println!("\nUse 'grit status' to see all staged changes");
+    println!("Use 'grit commit -m \"message\"' to commit");
 
     Ok(())
 }
@@ -302,7 +302,7 @@ pub async fn reset(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
 
     let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'gritinit' first.");
+        bail!("Playlist not initialized. Run 'grit init' first.");
     }
 
     let patch = load_staged(grit_dir, playlist_id)?;
@@ -324,7 +324,7 @@ pub async fn commit(message: &str, playlist: Option<&str>, grit_dir: &Path) -> R
 
     let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
     if !snapshot_path.exists() {
-        bail!("Playlist not initialized. Run 'gritinit' first.");
+        bail!("Playlist not initialized. Run 'grit init' first.");
     }
 
     let patch = load_staged(grit_dir, playlist_id)?;
@@ -372,7 +372,7 @@ pub async fn commit(message: &str, playlist: Option<&str>, grit_dir: &Path) -> R
     println!("\n[{}] {}", hash, message);
     println!("  +{} -{} ~{} tracks", added, removed, moved);
     println!("\nChanges committed to local snapshot.");
-    println!("Use 'gritpush' to sync with remote.");
+    println!("Use 'grit push' to sync with remote.");
 
     Ok(())
 }

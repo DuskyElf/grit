@@ -1,21 +1,35 @@
 use crate::provider::ProviderKind;
 use clap::{Parser, Subcommand};
 
-/// grit - Git-like version control for your playlists
+/// grit - Git-like version control for playlists
 ///
-/// Track changes, sync across devices, and play music from
+/// Track changes, sync across platforms, and play music from
 /// Spotify and YouTube with a unified terminal interface.
 #[derive(Parser, Debug)]
 #[command(name = "grit")]
-#[command(version, about, long_about = None)]
+#[command(version)]
+#[command(about = "Git-like version control for playlists")]
+#[command(
+    long_about = "grit - Version control for your music\n\n\
+                  Track playlist changes, sync across Spotify and YouTube,\n\
+                  and play music with a beautiful TUI.\n\n\
+                  EXAMPLES:\n  \
+                    grit auth spotify\n  \
+                    grit init https://open.spotify.com/playlist/...\n  \
+                    grit search \"lofi beats\"\n  \
+                    grit add <track-id>\n  \
+                    grit commit -m \"add chill vibes\"\n  \
+                    grit push\n  \
+                    grit play -l <playlist-id>"
+)]
 pub struct Cli {
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, help = "Override provider (spotify/youtube)")]
     pub provider: Option<ProviderKind>,
 
-    #[arg(short = 'l', long, global = true)]
+    #[arg(short = 'l', long, global = true, help = "Playlist ID to operate on")]
     pub playlist: Option<String>,
 
-    #[arg(short, long, global = true, default_value_t = false)]
+    #[arg(short, long, global = true, default_value_t = false, help = "Enable verbose output")]
     pub verbose: bool,
 
     #[command(subcommand)]
@@ -24,123 +38,145 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Initialize tracking for a playlist
+    /// Initialize tracking for a playlist (like 'git init')
+    #[command(visible_alias = "i")]
     Init {
-        /// Playlist URL or ID (e.g., https://open.spotify.com/playlist/37i9... or 37i9...)
+        #[arg(help = "Playlist URL or ID\n                       Example: https://open.spotify.com/playlist/37i9...")]
         playlist: String,
-        /// Provider (defaults to Spotify)
-        #[arg(short, long)]
+        #[arg(short, long, help = "Provider (defaults to Spotify)")]
         provider: Option<ProviderKind>,
     },
-    /// Pull latest changes from remote
+
+    /// Pull latest changes from remote (like 'git pull')
     Pull,
 
-    /// Show sync status
+    /// Show sync status (like 'git status')
+    #[command(visible_alias = "st")]
     Status {
-        /// Playlist ID or use --playlist
-        #[arg(short = 'l', long)]
+        #[arg(short = 'l', long, help = "Playlist ID or use --playlist")]
         playlist: Option<String>,
     },
-    /// Show change history
+
+    /// Show commit history (like 'git log')
     Log,
+
     /// Apply a playlist state from file
     Apply {
-        /// Path to the YAML file
+        #[arg(help = "Path to the YAML file")]
         file: String,
     },
-    /// Start playback
+
+    /// Start playback with TUI player
+    #[command(visible_alias = "p")]
     Play {
-        /// Playlist ID or use --playlist
-        #[arg(short = 'l', long)]
+        #[arg(short = 'l', long, help = "Playlist ID to play")]
         playlist: Option<String>,
-        /// Start with shuffle enabled
-        #[arg(short, long)]
+        #[arg(short, long, help = "Start with shuffle enabled")]
         shuffle: bool,
     },
-    /// Authenticate with a provider
+
+    /// Authenticate with Spotify or YouTube
     Auth {
-        /// Provider to authenticate
+        #[arg(help = "Provider: 'spotify' or 'youtube'")]
         provider: ProviderKind,
     },
+
+    /// Search for tracks to add
+    #[command(visible_alias = "s")]
     Search {
-        /// Search query
+        #[arg(help = "Search query (e.g., \"lofi beats\")")]
         query: String,
     },
+
+    /// Stage a track for addition (like 'git add')
+    #[command(visible_alias = "a")]
     Add {
-        /// Track ID to add
+        #[arg(help = "Track ID from search results")]
         track_id: String,
     },
+
+    /// Stage a track for removal (like 'git rm')
+    #[command(visible_alias = "rm")]
     Remove {
-        /// Track ID to remove
+        #[arg(help = "Track ID to remove")]
         track_id: String,
     },
+
+    /// Stage a track to be moved
+    #[command(visible_alias = "mv")]
     Move {
-        /// Track ID to move
+        #[arg(help = "Track ID to move")]
         track_id: String,
-        /// New position index
+        #[arg(help = "New position (0-based index)")]
         new_index: usize,
     },
+
+    /// Commit staged changes (like 'git commit')
+    #[command(visible_alias = "c")]
     Commit {
-        /// Commit message
-        #[arg(short, long)]
+        #[arg(short, long, help = "Commit message")]
         message: String,
     },
-    /// Push local changes to remote
+
+    /// Push local changes to remote (like 'git push')
     Push {
-        /// Playlist ID to push
-        #[arg(short = 'l', long)]
+        #[arg(short = 'l', long, help = "Playlist ID to push")]
         playlist: Option<String>,
     },
+
+    /// Show differences between versions (like 'git diff')
+    #[command(visible_alias = "d")]
     Diff {
-        /// Show only staged changes
-        #[arg(long)]
+        #[arg(long, help = "Show only staged changes")]
         staged: bool,
-        /// Show only remote changes
-        #[arg(long)]
+        #[arg(long, help = "Show only remote changes")]
         remote: bool,
     },
 
-    /// Clear staged changes
+    /// Clear staged changes (like 'git reset')
     Reset {
-        /// Playlist ID or use --playlist
-        #[arg(short = 'l', long)]
+        #[arg(short = 'l', long, help = "Playlist ID")]
         playlist: Option<String>,
     },
+
     /// List tracks in local playlist
+    #[command(visible_alias = "ls")]
     List {
-        /// Playlist ID or use --playlist
-        #[arg(short = 'l', long)]
+        #[arg(short = 'l', long, help = "Playlist ID")]
         playlist: Option<String>,
     },
+
     /// Search within local playlist tracks
     Find {
-        /// Search query
+        #[arg(help = "Search query")]
         query: String,
-        /// Playlist ID or use --playlist
-        #[arg(short = 'l', long)]
+        #[arg(short = 'l', long, help = "Playlist ID")]
         playlist: Option<String>,
     },
+
     /// Delete credentials for a provider
     Logout {
-        /// Provider to logout from
+        #[arg(help = "Provider: 'spotify' or 'youtube'")]
         provider: ProviderKind,
     },
+
     /// Show authenticated user info
     Whoami {
-        /// Provider to check
+        #[arg(help = "Provider: 'spotify' or 'youtube'")]
         provider: ProviderKind,
     },
-    /// List or search locally tracked playlists
+
+    /// List all tracked playlists
     Playlists {
-        /// Optional search query to filter by name/description
+        #[arg(help = "Optional search query to filter")]
         query: Option<String>,
     },
-    /// Revert playlist to a previous commit state
+
+    /// Revert playlist to a previous commit
     Revert {
-        /// Commit hash to revert to (defaults to previous commit if not provided)
+        #[arg(help = "Commit hash (defaults to previous commit)")]
         hash: Option<String>,
-        /// Playlist ID or use --playlist
-        #[arg(short = 'l', long)]
+        #[arg(short = 'l', long, help = "Playlist ID")]
         playlist: Option<String>,
     },
 }

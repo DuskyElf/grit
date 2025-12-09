@@ -150,14 +150,14 @@ pub async fn logout(provider: ProviderKind, grit_dir: &Path) -> Result<()> {
     credentials::delete(grit_dir, provider)?;
 
     println!("Logged out from {:?}", provider);
-    println!("Run 'gritauth {:?}' to login again", provider);
+    println!("Run 'grit auth {:?}' to login again", provider);
 
     Ok(())
 }
 
 pub async fn whoami(provider: ProviderKind, grit_dir: &Path) -> Result<()> {
     let token = credentials::load(grit_dir, provider)?
-        .context("Not authenticated. Run 'gritauth <provider>' first")?;
+        .context("Not authenticated. Run 'grit auth <provider>' first")?;
 
     match provider {
         ProviderKind::Spotify => {
