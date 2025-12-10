@@ -110,8 +110,11 @@ fn render(frame: &mut Frame, app: &App) {
     draw_next_up(frame, app, left_chunks[3]);
     draw_controls(frame, app, left_chunks[5]);
 
-    // Right side: playlist
-    draw_playlist(frame, app, main_chunks[1]);
+    if app.show_lyrics {
+        draw_lyrics(frame, app, main_chunks[1]);
+    } else {
+        draw_playlist(frame, app, main_chunks[1]);
+    }
 }
 
 fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
@@ -320,6 +323,78 @@ fn draw_playlist(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(list, area);
 }
 
+fn draw_lyrics(frame: &mut Frame, app: &App, area: Rect) {
+    let visible_height = area.height.saturating_sub(2) as usize;
+    let current_idx = app.current_lyric_index();
+
+    let auto_indicator = if app.lyrics_auto_scroll { "⟳" } else { "⏸" };
+    let title = if app.lyrics_loading {
+        " lyrics (loading...) ".to_string()
+    } else if let Some(ref lyrics) = app.lyrics {
+        if !lyrics.lines.is_empty() {
+            format!(" lyrics (synced) {} ", auto_indicator)
+        } else if lyrics.plain.is_some() {
+            " lyrics ".to_string()
+        } else {
+            " lyrics (not found) ".to_string()
+        }
+    } else {
+        " lyrics ".to_string()
+    };
+
+    let items: Vec<ListItem> = if app.lyrics_loading {
+        vec![ListItem::new("Loading lyrics...").style(Style::default().fg(SAKURA_DIM))]
+    } else if let Some(ref lyrics) = app.lyrics {
+        if lyrics.lines.is_empty() {
+            if let Some(ref plain) = lyrics.plain {
+                let scroll = app.lyrics_scroll.min(plain.lines().count().saturating_sub(1));
+                plain.lines()
+                    .skip(scroll)
+                    .take(visible_height)
+                    .map(|line| {
+                        ListItem::new(line.to_string())
+                            .style(Style::default().fg(SAKURA_FG))
+                    })
+                    .collect()
+            } else {
+                vec![ListItem::new("No lyrics available").style(Style::default().fg(SAKURA_DIM))]
+            }
+        } else {
+            let scroll = if app.lyrics_auto_scroll {
+                current_idx
+                    .map(|idx| idx.saturating_sub(visible_height / 3))
+                    .unwrap_or(app.lyrics_scroll)
+            } else {
+                app.lyrics_scroll.min(lyrics.lines.len().saturating_sub(1))
+            };
+
+            lyrics.lines.iter().enumerate()
+                .skip(scroll)
+                .take(visible_height)
+                .map(|(i, line)| {
+                    let is_current = current_idx == Some(i);
+                    let style = if is_current {
+                        Style::default().fg(SEA_GREEN_BRIGHT).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(SAKURA_DIM)
+                    };
+                    ListItem::new(line.text.clone()).style(style)
+                })
+                .collect()
+        }
+    } else {
+        vec![ListItem::new("Press 'l' to load lyrics").style(Style::default().fg(SAKURA_DIM))]
+    };
+
+    let block = Block::default()
+        .title(Span::styled(title, Style::default().fg(SAKURA_PINK)))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(SAKURA_DIM));
+
+    let list = List::new(items).block(block);
+    frame.render_widget(list, area);
+}
+
 fn draw_controls(frame: &mut Frame, app: &App, area: Rect) {
     let controls = if app.is_searching() {
         Line::from(vec![
@@ -341,16 +416,36 @@ fn draw_controls(frame: &mut Frame, app: &App, area: Rect) {
             Span::styled("[esc]", Style::default().fg(SAKURA_PINK)),
             Span::styled(" cancel", Style::default().fg(SAKURA_DIM)),
         ])
+    } else if app.search_blocked {
+        Line::from(vec![
+            Span::styled("exit lyrics first ", Style::default().fg(Color::Rgb(255, 150, 150))),
+            Span::styled("[l]", Style::default().fg(SAKURA_PINK)),
+        ])
+    } else if app.show_lyrics {
+        Line::from(vec![
+            Span::styled("[↑↓]", Style::default().fg(SAKURA_PINK)),
+            Span::styled(" scroll ", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[←→]", Style::default().fg(SAKURA_PINK)),
+            Span::styled(" ±5s ", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[a]", Style::default().fg(SAKURA_PINK)),
+            Span::styled(" auto ", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[n/p]", Style::default().fg(SAKURA_PINK)),
+            Span::styled(" skip ", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[l]", Style::default().fg(SAKURA_PINK)),
+            Span::styled(" playlist ", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[q]", Style::default().fg(SAKURA_PINK)),
+            Span::styled(" quit", Style::default().fg(SAKURA_DIM)),
+        ])
     } else {
         Line::from(vec![
             Span::styled("[space]", Style::default().fg(SAKURA_PINK)),
             Span::styled(" pause ", Style::default().fg(SAKURA_DIM)),
             Span::styled("[n/p]", Style::default().fg(SAKURA_PINK)),
             Span::styled(" skip ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[←→]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" ±5s ", Style::default().fg(SAKURA_DIM)),
             Span::styled("[g]", Style::default().fg(SAKURA_PINK)),
             Span::styled(" seek ", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[l]", Style::default().fg(SAKURA_PINK)),
+            Span::styled(" lyrics ", Style::default().fg(SAKURA_DIM)),
             Span::styled("[/]", Style::default().fg(SAKURA_PINK)),
             Span::styled(" search ", Style::default().fg(SAKURA_DIM)),
             Span::styled("[s]", Style::default().fg(SAKURA_PINK)),

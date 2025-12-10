@@ -1,4 +1,5 @@
 use crate::playback::events::RepeatMode;
+use crate::playback::Lyrics;
 use crate::provider::Track;
 
 pub enum PlayerBackend {
@@ -10,7 +11,7 @@ pub struct App {
     pub playlist_name: String,
     pub tracks: Vec<Track>,
     pub current_index: usize,
-    pub selected_index: usize, // For playlist navigation
+    pub selected_index: usize,
     pub is_paused: bool,
     pub shuffle: bool,
     pub repeat_mode: RepeatMode,
@@ -23,6 +24,12 @@ pub struct App {
     pub search_query: Option<String>,
     pub search_matches: Vec<usize>,
     pub search_match_index: usize,
+    pub lyrics: Option<Lyrics>,
+    pub show_lyrics: bool,
+    pub lyrics_loading: bool,
+    pub lyrics_scroll: usize,
+    pub lyrics_auto_scroll: bool,
+    pub search_blocked: bool,
 }
 
 impl App {
@@ -45,7 +52,52 @@ impl App {
             search_query: None,
             search_matches: Vec::new(),
             search_match_index: 0,
+            lyrics: None,
+            show_lyrics: false,
+            lyrics_loading: false,
+            lyrics_scroll: 0,
+            lyrics_auto_scroll: true,
+            search_blocked: false,
         }
+    }
+
+    pub fn toggle_lyrics(&mut self) {
+        self.show_lyrics = !self.show_lyrics;
+    }
+
+    pub fn lyrics_scroll_up(&mut self) {
+        self.lyrics_scroll = self.lyrics_scroll.saturating_sub(1);
+        self.lyrics_auto_scroll = false;
+    }
+
+    pub fn lyrics_scroll_down(&mut self, max_lines: usize) {
+        if self.lyrics_scroll < max_lines.saturating_sub(1) {
+            self.lyrics_scroll += 1;
+        }
+        self.lyrics_auto_scroll = false;
+    }
+
+    pub fn lyrics_toggle_auto_scroll(&mut self) {
+        self.lyrics_auto_scroll = !self.lyrics_auto_scroll;
+    }
+
+    pub fn lyrics_line_count(&self) -> usize {
+        self.lyrics.as_ref().map(|l| {
+            if l.lines.is_empty() {
+                l.plain.as_ref().map(|p| p.lines().count()).unwrap_or(0)
+            } else {
+                l.lines.len()
+            }
+        }).unwrap_or(0)
+    }
+
+    pub fn reset_lyrics_scroll(&mut self) {
+        self.lyrics_scroll = 0;
+        self.lyrics_auto_scroll = true;
+    }
+
+    pub fn current_lyric_index(&self) -> Option<usize> {
+        self.lyrics.as_ref()?.current_line_index(self.position_secs)
     }
 
     pub fn current_track(&self) -> Option<&Track> {

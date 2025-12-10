@@ -1,8 +1,9 @@
 use anyhow::{bail, Context, Result};
 use crossterm::event::KeyCode;
 use std::path::Path;
+use tokio::sync::mpsc;
 
-use crate::playback::{fetch_audio_url, MpvPlayer, Queue, SpotifyPlayer};
+use crate::playback::{fetch_audio_url, fetch_lyrics, Lyrics, MpvPlayer, Queue, SpotifyPlayer};
 use crate::provider::ProviderKind;
 use crate::state::{credentials, snapshot};
 use crate::tui::{App, PlayerBackend, Tui};
@@ -65,7 +66,17 @@ async fn play_spotify(
         .and_then(|m| m.modified())
         .ok();
 
+    // Background lyrics channel
+    let (lyrics_tx, mut lyrics_rx) = mpsc::channel::<Lyrics>(1);
+    let mut lyrics_track_id: Option<String> = None;
+
     loop {
+        // Check for background lyrics result
+        if let Ok(lyrics) = lyrics_rx.try_recv() {
+            app.lyrics = Some(lyrics);
+            app.lyrics_loading = false;
+        }
+
         tui.draw(&app)?;
         poll_counter = poll_counter.wrapping_add(1);
 
@@ -97,6 +108,8 @@ async fn play_spotify(
                                 app.current_index = idx;
                                 app.position_secs = 0.0;
                                 app.duration_secs = app.tracks[idx].duration_ms as f64 / 1000.0;
+                                // Clear lyrics for new track
+                                app.lyrics = None;
                             }
                         }
                     }
@@ -147,11 +160,15 @@ async fn play_spotify(
                                 app.current_index = idx;
                                 app.position_secs = 0.0;
                                 app.duration_secs = app.tracks[idx].duration_ms as f64 / 1000.0;
+                                app.lyrics = None;
+                                app.reset_lyrics_scroll();
                             }
                         }
                     }
                     KeyCode::Char('n') => app.next_search_match(),
                     KeyCode::Char('N') => app.prev_search_match(),
+                    KeyCode::Up => app.select_prev(),
+                    KeyCode::Down => app.select_next(),
                     KeyCode::Backspace => app.pop_search_char(),
                     KeyCode::Char(c) => app.push_search_char(c),
                     _ => {}
@@ -179,10 +196,22 @@ async fn play_spotify(
                 continue;
             }
 
-            app.clear_error();
+            match key {
+                KeyCode::Char('/') if app.show_lyrics => {
+                    app.search_blocked = true;
+                }
+                _ => {
+                    app.search_blocked = false;
+                    app.clear_error();
+                }
+            }
             match key {
                 KeyCode::Char('q') => break,
-                KeyCode::Char('/') => app.start_search(),
+                KeyCode::Char('/') => {
+                    if !app.show_lyrics {
+                        app.start_search();
+                    }
+                }
                 KeyCode::Char('g') => app.start_seeking(),
                 KeyCode::Char(' ') => {
                     app.is_paused = !app.is_paused;
@@ -205,6 +234,8 @@ async fn play_spotify(
                                 app.current_index = idx;
                                 app.position_secs = 0.0;
                                 app.duration_secs = app.tracks[idx].duration_ms as f64 / 1000.0;
+                                app.lyrics = None;
+                                app.reset_lyrics_scroll();
                             }
                         }
                     }
@@ -219,6 +250,8 @@ async fn play_spotify(
                                 app.current_index = idx;
                                 app.position_secs = 0.0;
                                 app.duration_secs = app.tracks[idx].duration_ms as f64 / 1000.0;
+                                app.lyrics = None;
+                                app.reset_lyrics_scroll();
                             }
                         }
                     }
@@ -234,6 +267,25 @@ async fn play_spotify(
                     if let Err(e) = player.set_repeat(app.repeat_mode).await {
                         app.set_error(e.to_string());
                     }
+                }
+                KeyCode::Char('l') => {
+                    app.toggle_lyrics();
+                    if app.show_lyrics && app.lyrics.is_none() && !app.lyrics_loading {
+                        if let Some(track) = app.current_track().cloned() {
+                            app.lyrics_loading = true;
+                            tui.draw(&app)?;
+                            let artist = track.artists.first().map(|s| s.as_str()).unwrap_or("");
+                            let duration_secs = track.duration_ms / 1000;
+                            match fetch_lyrics(&track.name, artist, duration_secs as u64).await {
+                                Ok(lyrics) => app.lyrics = Some(lyrics),
+                                Err(_) => app.lyrics = Some(Default::default()),
+                            }
+                            app.lyrics_loading = false;
+                        }
+                    }
+                }
+                KeyCode::Char('a') if app.show_lyrics => {
+                    app.lyrics_toggle_auto_scroll();
                 }
                 KeyCode::Left => {
                     let new_pos = (app.position_secs - 5.0).max(0.0);
@@ -253,8 +305,21 @@ async fn play_spotify(
                         }
                     }
                 }
-                KeyCode::Up => app.select_prev(),
-                KeyCode::Down => app.select_next(),
+                KeyCode::Up => {
+                    if app.show_lyrics {
+                        app.lyrics_scroll_up();
+                    } else {
+                        app.select_prev();
+                    }
+                }
+                KeyCode::Down => {
+                    if app.show_lyrics {
+                        let max_lines = app.lyrics_line_count();
+                        app.lyrics_scroll_down(max_lines);
+                    } else {
+                        app.select_next();
+                    }
+                }
                 KeyCode::Enter => {
                     let idx = app.selected_index;
                     if idx != app.current_index && idx < app.tracks.len() {
@@ -269,10 +334,32 @@ async fn play_spotify(
                             app.current_index = idx;
                             app.position_secs = 0.0;
                             app.duration_secs = app.tracks[idx].duration_ms as f64 / 1000.0;
+                            app.lyrics = None;
                         }
                     }
                 }
                 _ => {}
+            }
+        }
+
+        // Auto-fetch lyrics in background if panel is showing and lyrics needed
+        if app.show_lyrics && app.lyrics.is_none() && !app.lyrics_loading {
+            if let Some(track) = app.current_track().cloned() {
+                let current_id = track.id.clone();
+                if lyrics_track_id.as_ref() != Some(&current_id) {
+                    lyrics_track_id = Some(current_id);
+                    app.lyrics_loading = true;
+                    let tx = lyrics_tx.clone();
+                    let name = track.name.clone();
+                    let artist = track.artists.first().cloned().unwrap_or_default();
+                    let duration = track.duration_ms / 1000;
+                    tokio::spawn(async move {
+                        let lyrics = fetch_lyrics(&name, &artist, duration as u64)
+                            .await
+                            .unwrap_or_default();
+                        let _ = tx.send(lyrics).await;
+                    });
+                }
             }
         }
     }
@@ -392,6 +479,8 @@ async fn play_mpv(
                     }
                     KeyCode::Char('n') => app.next_search_match(),
                     KeyCode::Char('N') => app.prev_search_match(),
+                    KeyCode::Up => app.select_prev(),
+                    KeyCode::Down => app.select_next(),
                     KeyCode::Backspace => app.pop_search_char(),
                     KeyCode::Char(c) => app.push_search_char(c),
                     _ => {}
@@ -420,10 +509,22 @@ async fn play_mpv(
                 continue;
             }
 
-            app.clear_error();
+            match key {
+                KeyCode::Char('/') if app.show_lyrics => {
+                    app.search_blocked = true;
+                }
+                _ => {
+                    app.search_blocked = false;
+                    app.clear_error();
+                }
+            }
             match key {
                 KeyCode::Char('q') => break,
-                KeyCode::Char('/') => app.start_search(),
+                KeyCode::Char('/') => {
+                    if !app.show_lyrics {
+                        app.start_search();
+                    }
+                }
                 KeyCode::Char('g') => app.start_seeking(),
                 KeyCode::Char(' ') => {
                     app.is_paused = !app.is_paused;
@@ -528,11 +629,26 @@ async fn play_mpv(
                         }
                     }
                 }
+                KeyCode::Char('l') => {
+                    app.toggle_lyrics();
+                }
+                KeyCode::Char('a') if app.show_lyrics => {
+                    app.lyrics_toggle_auto_scroll();
+                }
                 KeyCode::Up => {
-                    app.select_prev();
+                    if app.show_lyrics {
+                        app.lyrics_scroll_up();
+                    } else {
+                        app.select_prev();
+                    }
                 }
                 KeyCode::Down => {
-                    app.select_next();
+                    if app.show_lyrics {
+                        let max_lines = app.lyrics_line_count();
+                        app.lyrics_scroll_down(max_lines);
+                    } else {
+                        app.select_next();
+                    }
                 }
                 KeyCode::Enter => {
                     let idx = app.selected_index;
