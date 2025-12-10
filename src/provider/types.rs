@@ -1,10 +1,21 @@
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 pub enum ProviderKind {
     Spotify,
     Youtube,
+}
+
+impl fmt::Display for ProviderKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // kabab-case, as that's what `clap::ValueEnum` parses by default
+            ProviderKind::Spotify => write!(f, "spotify"),
+            ProviderKind::Youtube => write!(f, "youtube"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

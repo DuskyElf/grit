@@ -49,8 +49,9 @@ pub async fn run(provider: ProviderKind, playlist: &str, grit_dir: &Path) -> Res
         );
     }
 
-    let token = credentials::load(grit_dir, provider)?
-        .context("No credentials found. Please run 'grit auth <provider>' first.")?;
+    let token = credentials::load(grit_dir, provider)?.context(format!(
+        "No credentials found. Please run 'grit auth {provider}' first."
+    ))?;
 
     let provider_impl: Box<dyn Provider> = match provider {
         ProviderKind::Spotify => {
