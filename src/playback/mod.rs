@@ -4,7 +4,7 @@ pub mod mpv;
 pub mod queue;
 pub mod spotify;
 
-pub use lyrics::{fetch_lyrics, Lyrics};
+pub use lyrics::{Lyrics, LyricsFetcher};
 pub use mpv::{fetch_audio_url, MpvPlayer};
 pub use queue::Queue;
 pub use spotify::SpotifyPlayer;

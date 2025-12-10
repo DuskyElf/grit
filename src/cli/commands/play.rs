@@ -1,9 +1,8 @@
 use anyhow::{bail, Context, Result};
 use crossterm::event::KeyCode;
 use std::path::Path;
-use tokio::sync::mpsc;
 
-use crate::playback::{fetch_audio_url, fetch_lyrics, Lyrics, MpvPlayer, Queue, SpotifyPlayer};
+use crate::playback::{fetch_audio_url, LyricsFetcher, MpvPlayer, Queue, SpotifyPlayer};
 use crate::provider::ProviderKind;
 use crate::state::{credentials, snapshot};
 use crate::tui::{App, PlayerBackend, Tui};
@@ -66,13 +65,10 @@ async fn play_spotify(
         .and_then(|m| m.modified())
         .ok();
 
-    // Background lyrics channel
-    let (lyrics_tx, mut lyrics_rx) = mpsc::channel::<Lyrics>(1);
-    let mut lyrics_track_id: Option<String> = None;
+    let mut lyrics_fetcher = LyricsFetcher::new();
 
     loop {
-        // Check for background lyrics result
-        if let Ok(lyrics) = lyrics_rx.try_recv() {
+        if let Some(lyrics) = lyrics_fetcher.try_recv() {
             app.lyrics = Some(lyrics);
             app.lyrics_loading = false;
         }
@@ -270,19 +266,6 @@ async fn play_spotify(
                 }
                 KeyCode::Char('l') => {
                     app.toggle_lyrics();
-                    if app.show_lyrics && app.lyrics.is_none() && !app.lyrics_loading {
-                        if let Some(track) = app.current_track().cloned() {
-                            app.lyrics_loading = true;
-                            tui.draw(&app)?;
-                            let artist = track.artists.first().map(|s| s.as_str()).unwrap_or("");
-                            let duration_secs = track.duration_ms / 1000;
-                            match fetch_lyrics(&track.name, artist, duration_secs as u64).await {
-                                Ok(lyrics) => app.lyrics = Some(lyrics),
-                                Err(_) => app.lyrics = Some(Default::default()),
-                            }
-                            app.lyrics_loading = false;
-                        }
-                    }
                 }
                 KeyCode::Char('a') if app.show_lyrics => {
                     app.lyrics_toggle_auto_scroll();
@@ -342,24 +325,12 @@ async fn play_spotify(
             }
         }
 
-        // Auto-fetch lyrics in background if panel is showing and lyrics needed
         if app.show_lyrics && app.lyrics.is_none() && !app.lyrics_loading {
-            if let Some(track) = app.current_track().cloned() {
-                let current_id = track.id.clone();
-                if lyrics_track_id.as_ref() != Some(&current_id) {
-                    lyrics_track_id = Some(current_id);
-                    app.lyrics_loading = true;
-                    let tx = lyrics_tx.clone();
-                    let name = track.name.clone();
-                    let artist = track.artists.first().cloned().unwrap_or_default();
-                    let duration = track.duration_ms / 1000;
-                    tokio::spawn(async move {
-                        let lyrics = fetch_lyrics(&name, &artist, duration as u64)
-                            .await
-                            .unwrap_or_default();
-                        let _ = tx.send(lyrics).await;
-                    });
-                }
+            if let Some(track) = app.current_track() {
+                let artist = track.artists.first().map(|s| s.as_str()).unwrap_or("");
+                let duration = track.duration_ms / 1000;
+                lyrics_fetcher.fetch_for_track(&track.id, &track.name, artist, duration as u64);
+                app.lyrics_loading = true;
             }
         }
     }
@@ -400,6 +371,8 @@ async fn play_mpv(
     let mut tui = Tui::new()?;
     tui.draw(&app)?;
 
+    let mut lyrics_fetcher = LyricsFetcher::new();
+
     if let Some(track) = queue.current_track().cloned() {
         let yt_url = provider.playable_url(&track).await?;
         match fetch_audio_url(&yt_url).await {
@@ -421,6 +394,11 @@ async fn play_mpv(
     app.loading = false;
 
     loop {
+        if let Some(lyrics) = lyrics_fetcher.try_recv() {
+            app.lyrics = Some(lyrics);
+            app.lyrics_loading = false;
+        }
+
         tui.draw(&app)?;
 
         if !app.is_paused && skip_position == 0 {
@@ -458,6 +436,10 @@ async fn play_mpv(
                                 app.current_index = idx;
                                 app.position_secs = 0.0;
                                 app.duration_secs = track.duration_ms as f64 / 1000.0;
+                                app.lyrics = None;
+                                app.lyrics_loading = false;
+                                app.reset_lyrics_scroll();
+                                lyrics_fetcher.reset();
                                 queue.jump_to(idx);
                                 tui.draw(&app)?;
                                 match provider.playable_url(&track).await {
@@ -556,6 +538,10 @@ async fn play_mpv(
                         }
                         app.position_secs = 0.0;
                         app.duration_secs = track.duration_ms as f64 / 1000.0;
+                        app.lyrics = None;
+                        app.lyrics_loading = false;
+                        app.reset_lyrics_scroll();
+                        lyrics_fetcher.reset();
                         tui.draw(&app)?;
                         match provider.playable_url(&track).await {
                             Ok(yt_url) => match fetch_audio_url(&yt_url).await {
@@ -581,6 +567,10 @@ async fn play_mpv(
                         }
                         app.position_secs = 0.0;
                         app.duration_secs = track.duration_ms as f64 / 1000.0;
+                        app.lyrics = None;
+                        app.lyrics_loading = false;
+                        app.reset_lyrics_scroll();
+                        lyrics_fetcher.reset();
                         tui.draw(&app)?;
                         match provider.playable_url(&track).await {
                             Ok(yt_url) => match fetch_audio_url(&yt_url).await {
@@ -658,6 +648,10 @@ async fn play_mpv(
                             app.current_index = idx;
                             app.position_secs = 0.0;
                             app.duration_secs = track.duration_ms as f64 / 1000.0;
+                            app.lyrics = None;
+                            app.lyrics_loading = false;
+                            app.reset_lyrics_scroll();
+                            lyrics_fetcher.reset();
                             queue.jump_to(idx);
                             tui.draw(&app)?;
                             match provider.playable_url(&track).await {
@@ -678,6 +672,14 @@ async fn play_mpv(
                     }
                 }
                 _ => {}
+            }
+        }
+
+        if app.show_lyrics && app.lyrics.is_none() && !app.lyrics_loading {
+            if let Some(track) = app.current_track() {
+                let duration = track.duration_ms / 1000;
+                lyrics_fetcher.fetch_for_yt(&track.id, &track.name, duration as u64);
+                app.lyrics_loading = true;
             }
         }
 
@@ -705,6 +707,10 @@ async fn play_mpv(
                     }
                     app.position_secs = 0.0;
                     app.duration_secs = track.duration_ms as f64 / 1000.0;
+                    app.lyrics = None;
+                    app.lyrics_loading = false;
+                    app.reset_lyrics_scroll();
+                    lyrics_fetcher.reset();
                     tui.draw(&app)?;
 
                     if let Ok(yt_url) = provider.playable_url(&track).await {
