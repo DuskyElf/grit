@@ -29,7 +29,12 @@ pub struct Cli {
     )]
     pub provider: Option<ProviderKind>,
 
-    #[arg(short = 'l', long, global = true, help = "Playlist ID to operate on")]
+    #[arg(
+        short = 'l',
+        long,
+        global = true,
+        help = "Playlist ID to operate on (uses working playlist if not specified)"
+    )]
     pub playlist: Option<String>,
 
     #[arg(
@@ -185,6 +190,12 @@ pub enum Commands {
     Playlists {
         #[arg(help = "Optional search query to filter")]
         query: Option<String>,
+    },
+
+    /// Switch the working playlist
+    Switch {
+        #[arg(help = "Playlist ID to set as working playlist")]
+        playlist: String,
     },
 
     /// Revert playlist to a previous commit

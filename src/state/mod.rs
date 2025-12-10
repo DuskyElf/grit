@@ -3,6 +3,7 @@ pub mod diff;
 pub mod journal;
 pub mod snapshot;
 pub mod staging;
+pub mod working_playlist;
 
 pub use diff::{apply_patch, diff};
 pub use journal::{JournalEntry, Operation};
