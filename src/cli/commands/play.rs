@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 use std::path::Path;
 
 use crate::playback::{fetch_audio_url, LyricsFetcher, MpvPlayer, Queue, SpotifyPlayer};
@@ -139,9 +139,9 @@ async fn play_spotify(
 
         if let Some(key) = tui.poll_key()? {
             if app.is_searching() {
-                match key {
-                    KeyCode::Esc => app.cancel_search(),
-                    KeyCode::Enter => {
+                match (key.code, key.modifiers) {
+                    (KeyCode::Esc, _) => app.cancel_search(),
+                    (KeyCode::Enter, _) => {
                         let idx = app.selected_index;
                         app.cancel_search();
                         if idx != app.current_index && idx < app.tracks.len() {
@@ -161,19 +161,19 @@ async fn play_spotify(
                             }
                         }
                     }
-                    KeyCode::Char('n') => app.next_search_match(),
-                    KeyCode::Char('N') => app.prev_search_match(),
-                    KeyCode::Up => app.select_prev(),
-                    KeyCode::Down => app.select_next(),
-                    KeyCode::Backspace => app.pop_search_char(),
-                    KeyCode::Char(c) => app.push_search_char(c),
+                    (KeyCode::Char('n'), m) if m.contains(KeyModifiers::CONTROL) => app.next_search_match(),
+                    (KeyCode::Char('p'), m) if m.contains(KeyModifiers::CONTROL) => app.prev_search_match(),
+                    (KeyCode::Up, _) => app.select_prev(),
+                    (KeyCode::Down, _) => app.select_next(),
+                    (KeyCode::Backspace, _) => app.pop_search_char(),
+                    (KeyCode::Char(c), _) => app.push_search_char(c),
                     _ => {}
                 }
                 continue;
             }
 
             if app.is_seeking() {
-                match key {
+                match key.code {
                     KeyCode::Esc => app.cancel_seeking(),
                     KeyCode::Enter => {
                         if let Some(secs) = app.get_seek_position() {
@@ -192,7 +192,7 @@ async fn play_spotify(
                 continue;
             }
 
-            match key {
+            match key.code {
                 KeyCode::Char('/') if app.show_lyrics => {
                     app.search_blocked = true;
                 }
@@ -201,7 +201,7 @@ async fn play_spotify(
                     app.clear_error();
                 }
             }
-            match key {
+            match key.code {
                 KeyCode::Char('q') => break,
                 KeyCode::Char('/') => {
                     if !app.show_lyrics {
@@ -425,9 +425,9 @@ async fn play_mpv(
 
         if let Some(key) = tui.poll_key()? {
             if app.is_searching() {
-                match key {
-                    KeyCode::Esc => app.cancel_search(),
-                    KeyCode::Enter => {
+                match (key.code, key.modifiers) {
+                    (KeyCode::Esc, _) => app.cancel_search(),
+                    (KeyCode::Enter, _) => {
                         let idx = app.selected_index;
                         app.cancel_search();
                         if idx != app.current_index && idx < app.tracks.len() {
@@ -459,19 +459,19 @@ async fn play_mpv(
                             }
                         }
                     }
-                    KeyCode::Char('n') => app.next_search_match(),
-                    KeyCode::Char('N') => app.prev_search_match(),
-                    KeyCode::Up => app.select_prev(),
-                    KeyCode::Down => app.select_next(),
-                    KeyCode::Backspace => app.pop_search_char(),
-                    KeyCode::Char(c) => app.push_search_char(c),
+                    (KeyCode::Char('n'), m) if m.contains(KeyModifiers::CONTROL) => app.next_search_match(),
+                    (KeyCode::Char('p'), m) if m.contains(KeyModifiers::CONTROL) => app.prev_search_match(),
+                    (KeyCode::Up, _) => app.select_prev(),
+                    (KeyCode::Down, _) => app.select_next(),
+                    (KeyCode::Backspace, _) => app.pop_search_char(),
+                    (KeyCode::Char(c), _) => app.push_search_char(c),
                     _ => {}
                 }
                 continue;
             }
 
             if app.is_seeking() {
-                match key {
+                match key.code {
                     KeyCode::Esc => app.cancel_seeking(),
                     KeyCode::Enter => {
                         if let Some(secs) = app.get_seek_position() {
@@ -491,7 +491,7 @@ async fn play_mpv(
                 continue;
             }
 
-            match key {
+            match key.code {
                 KeyCode::Char('/') if app.show_lyrics => {
                     app.search_blocked = true;
                 }
@@ -500,7 +500,7 @@ async fn play_mpv(
                     app.clear_error();
                 }
             }
-            match key {
+            match key.code {
                 KeyCode::Char('q') => break,
                 KeyCode::Char('/') => {
                     if !app.show_lyrics {

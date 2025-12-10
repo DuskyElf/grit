@@ -1,7 +1,7 @@
 use std::io::{self, Stdout};
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind},
+    event::{self, Event, KeyEvent, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -45,11 +45,11 @@ impl Tui {
         Ok(())
     }
 
-    pub fn poll_key(&self) -> Result<Option<KeyCode>> {
+    pub fn poll_key(&self) -> Result<Option<KeyEvent>> {
         if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    return Ok(Some(key.code));
+                    return Ok(Some(key));
                 }
             }
         }
@@ -402,7 +402,7 @@ fn draw_controls(frame: &mut Frame, app: &App, area: Rect) {
     let controls = if app.is_searching() {
         Line::from(vec![
             Span::styled("[type]", k), Span::styled(" filter  ", d),
-            Span::styled("[n/N]", k), Span::styled(" next/prev  ", d),
+            Span::styled("[ctrl+n/p]", k), Span::styled(" next/prev  ", d),
             Span::styled("[enter]", k), Span::styled(" play  ", d),
             Span::styled("[esc]", k), Span::styled(" cancel", d),
         ])
