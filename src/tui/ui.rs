@@ -396,64 +396,47 @@ fn draw_lyrics(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_controls(frame: &mut Frame, app: &App, area: Rect) {
+    let k = Style::default().fg(SAKURA_PINK);
+    let d = Style::default().fg(SAKURA_DIM);
+
     let controls = if app.is_searching() {
         Line::from(vec![
-            Span::styled("[type]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" search ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[n/N]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" next/prev ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[enter]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" play ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[esc]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" cancel", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[type]", k), Span::styled(" filter  ", d),
+            Span::styled("[n/N]", k), Span::styled(" next/prev  ", d),
+            Span::styled("[enter]", k), Span::styled(" play  ", d),
+            Span::styled("[esc]", k), Span::styled(" cancel", d),
         ])
     } else if app.is_seeking() {
         Line::from(vec![
-            Span::styled("[←→]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" ±5s ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[enter]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" confirm ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[esc]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" cancel", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[←→]", k), Span::styled(" ±5s  ", d),
+            Span::styled("[enter]", k), Span::styled(" confirm  ", d),
+            Span::styled("[esc]", k), Span::styled(" cancel", d),
         ])
     } else if app.search_blocked {
         Line::from(vec![
             Span::styled("exit lyrics first ", Style::default().fg(Color::Rgb(255, 150, 150))),
-            Span::styled("[l]", Style::default().fg(SAKURA_PINK)),
+            Span::styled("[l]", k),
         ])
     } else if app.show_lyrics {
         Line::from(vec![
-            Span::styled("[↑↓]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" scroll ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[←→]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" ±5s ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[a]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" auto ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[n/p]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" skip ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[l]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" playlist ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[q]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" quit", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[↑↓]", k), Span::styled(" scroll  ", d),
+            Span::styled("[a]", k), Span::styled(" auto  ", d),
+            Span::styled("[n/p]", k), Span::styled(" skip  ", d),
+            Span::styled("[←→]", k), Span::styled(" seek  ", d),
+            Span::styled("[l]", k), Span::styled(" back  ", d),
+            Span::styled("[q]", k), Span::styled(" quit", d),
         ])
     } else {
         Line::from(vec![
-            Span::styled("[space]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" pause ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[n/p]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" skip ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[g]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" seek ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[l]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" lyrics ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[/]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" search ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[s]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" shuffle ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[r]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" repeat ", Style::default().fg(SAKURA_DIM)),
-            Span::styled("[q]", Style::default().fg(SAKURA_PINK)),
-            Span::styled(" quit", Style::default().fg(SAKURA_DIM)),
+            Span::styled("[space]", k), Span::styled(" pause  ", d),
+            Span::styled("[n/p]", k), Span::styled(" skip  ", d),
+            Span::styled("[←→]", k), Span::styled(" seek  ", d),
+            Span::styled("[g]", k), Span::styled(" goto  ", d),
+            Span::styled("[/]", k), Span::styled(" search  ", d),
+            Span::styled("[l]", k), Span::styled(" lyrics  ", d),
+            Span::styled("[s]", k), Span::styled(" shuffle  ", d),
+            Span::styled("[r]", k), Span::styled(" repeat  ", d),
+            Span::styled("[q]", k), Span::styled(" quit", d),
         ])
     };
 
