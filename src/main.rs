@@ -30,8 +30,20 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_or(ProviderKind::Spotify);
             cli::commands::init::run(provider, &playlist, &grit_dir).await?;
         }
-        Commands::Search { query } => {
-            cli::commands::staging::search(&query, cli.provider, &grit_dir).await?;
+        Commands::Search { query, add } => {
+            let playlist = if add {
+                Some(resolve_playlist(None, cli.playlist.clone(), &grit_dir)?)
+            } else {
+                None
+            };
+            cli::commands::staging::search(
+                &query,
+                cli.provider,
+                &grit_dir,
+                add,
+                playlist.as_deref(),
+            )
+            .await?;
         }
         Commands::Add { track_id } => {
             let playlist = resolve_playlist(None, cli.playlist, &grit_dir)?;

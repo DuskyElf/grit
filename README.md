@@ -126,6 +126,7 @@ grit play -l 37i9dqef1DX...
 | Command | Alias | Description |
 |---------|-------|-------------|
 | `grit search <query>` | `s` | Search for tracks to add |
+| `grit search <query> --add` | | Interactive mode to add by index |
 | `grit add <track-id>` | `a` | Stage a track for addition |
 | `grit remove <track-id>` | `rm` | Stage a track for removal |
 | `grit move <track-id> <index>` | `mv` | Stage a track to be moved |
@@ -217,10 +218,13 @@ grit play -l 37i9dqef1DX...
 ### Add tracks to a playlist
 
 ```bash
-# Search for tracks
-grit search "daft punk get lucky"
+# Option 1: Interactive mode (add by index)
+grit search "daft punk" --add
+# Shows numbered results, then prompts: "Add tracks [1,2,3...] or 'q' to quit:"
+# Enter: 1,3 to add tracks 1 and 3
 
-# Add by track ID (shown in search results)
+# Option 2: Add by track ID
+grit search "daft punk get lucky"
 grit add 2Foc5Q5nqNiosCNqttzHof
 
 # Commit and push

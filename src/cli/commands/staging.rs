@@ -113,16 +113,37 @@ pub async fn status(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub async fn search(query: &str, provider: Option<ProviderKind>, grit_dir: &Path) -> Result<()> {
+pub async fn search(
+    query: &str,
+    provider: Option<ProviderKind>,
+    grit_dir: &Path,
+    add_mode: bool,
+    playlist: Option<&str>,
+) -> Result<()> {
     let provider_kind = provider.context("Provider required for search (use --provider)")?;
-    let provider = create_provider(provider_kind, grit_dir)?;
+    let provider_instance = create_provider(provider_kind, grit_dir)?;
 
-    let tracks = provider.search_by_query(query).await?;
+    let tracks = provider_instance.search_by_query(query).await?;
 
     if tracks.is_empty() {
         println!("No tracks found for '{}'", query);
         return Ok(());
     }
+
+    // Load snapshot upfront if in add mode
+    let (playlist_id, snapshot) = if add_mode {
+        let pid = playlist.context("Playlist required for --add mode (use --playlist)")?;
+        let snapshot_path = snapshot::snapshot_path(grit_dir, pid);
+        if !snapshot_path.exists() {
+            bail!("Playlist not initialized. Run 'grit init' first.");
+        }
+        let snap = snapshot::load(&snapshot_path)?;
+        (Some(pid), Some(snap))
+    } else {
+        (None, None)
+    };
+
+    let mut total_added = 0;
 
     println!("\nSearch results for '{}':\n", query);
 
@@ -145,25 +166,94 @@ pub async fn search(query: &str, provider: Option<ProviderKind>, grit_dir: &Path
         }
 
         start = end;
+        let has_more = start < tracks.len();
 
-        if start >= tracks.len() {
-            // All results shown
+        // Prompt based on mode
+        if add_mode {
+            if has_more {
+                print!("Add [1,2,..] / [Enter] more / 'q' quit: ");
+            } else {
+                print!("Add tracks [1,2,3...] or 'q' to quit: ");
+            }
+        } else if has_more {
+            print!("Show more? [Enter] or 'q' to quit: ");
+        } else {
             break;
         }
-
-        // Prompt for more
-        print!("Show more? [Enter] or 'q' to quit: ");
         io::stdout().flush()?;
 
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
+        let input = input.trim();
 
-        if input.trim().eq_ignore_ascii_case("q") {
+        if input.eq_ignore_ascii_case("q") {
             break;
+        }
+
+        if input.is_empty() {
+            if has_more {
+                continue; // Show more results
+            } else {
+                break; // No more results, exit
+            }
+        }
+
+        // Try to parse as indices for adding
+        if add_mode {
+            if let (Some(pid), Some(ref snap)) = (playlist_id, &snapshot) {
+                let indices: Vec<usize> = input
+                    .split(',')
+                    .filter_map(|s| s.trim().parse::<usize>().ok())
+                    .collect();
+
+                if indices.is_empty() {
+                    println!("Invalid input. Enter comma-separated numbers (e.g., 1,2,3)");
+                    continue;
+                }
+
+                let current_len = snap.tracks.len() + total_added;
+
+                for idx in indices {
+                    if idx == 0 || idx > tracks.len() {
+                        println!("  Skipping invalid index: {}", idx);
+                        continue;
+                    }
+
+                    let track = &tracks[idx - 1];
+
+                    if track.provider != snap.provider {
+                        println!(
+                            "  Skipping {} - provider mismatch ({:?} vs {:?})",
+                            track.name, track.provider, snap.provider
+                        );
+                        continue;
+                    }
+
+                    let change = TrackChange::Added {
+                        track: track.clone(),
+                        index: current_len + total_added,
+                    };
+
+                    stage_change(grit_dir, pid, change)?;
+
+                    println!("  Staged: {} - {}", track.name, track.artists.join(", "));
+                    total_added += 1;
+                }
+            }
         }
     }
 
-    println!("Use 'grit add <track-id>' to stage a track for addition");
+    if add_mode && total_added > 0 {
+        println!("\n{} track(s) staged for addition", total_added);
+        println!("Use 'grit status' to see all staged changes");
+        println!("Use 'grit commit -m \"message\"' to commit");
+    } else if !add_mode {
+        println!("Use 'grit add <track-id>' to stage a track for addition");
+        println!(
+            "Or use 'grit search \"{}\" --add' for interactive mode",
+            query
+        );
+    }
 
     Ok(())
 }

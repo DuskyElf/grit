@@ -244,10 +244,7 @@ impl SpotifyPlayer {
             let mut input = String::new();
             std::io::stdin().read_line(&mut input)?;
 
-            let choice: usize = input
-                .trim()
-                .parse()
-                .context("Invalid selection")?;
+            let choice: usize = input.trim().parse().context("Invalid selection")?;
 
             if choice == 0 || choice > devices.len() {
                 bail!("Invalid device selection");

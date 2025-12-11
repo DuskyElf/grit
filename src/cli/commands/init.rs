@@ -99,7 +99,7 @@ pub async fn run(provider: ProviderKind, playlist: &str, grit_dir: &Path) -> Res
     println!("  Journal: {:?}", journal_path);
 
     // Set as working playlist
-    working_playlist::save(&grit_dir, &playlist_id)?;
+    working_playlist::save(grit_dir, &playlist_id)?;
 
     Ok(())
 }

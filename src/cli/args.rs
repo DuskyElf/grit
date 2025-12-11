@@ -106,6 +106,8 @@ pub enum Commands {
     Search {
         #[arg(help = "Search query (e.g., \"lofi beats\")")]
         query: String,
+        #[arg(short, long, help = "Interactive mode to add tracks by index")]
+        add: bool,
     },
 
     /// Stage a track for addition (like 'git add')
