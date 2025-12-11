@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::playback::{fetch_audio_url, LyricsFetcher, MpvPlayer, Queue, SpotifyPlayer};
 use crate::provider::ProviderKind;
-use crate::state::{credentials, snapshot};
+use crate::state::{credentials, snapshot, working_playlist};
 use crate::tui::{App, PlayerBackend, Tui};
 
 pub async fn run(playlist: Option<&str>, shuffle: bool, grit_dir: &Path) -> Result<()> {
@@ -20,9 +20,20 @@ pub async fn run(playlist: Option<&str>, shuffle: bool, grit_dir: &Path) -> Resu
         bail!("Playlist is empty");
     }
 
+    // Load last played track index
+    let start_index = working_playlist::load_state(grit_dir)
+        .ok()
+        .and_then(|s| s.last_track_index)
+        .unwrap_or(0)
+        .min(snap.tracks.len().saturating_sub(1));
+
     match snap.provider {
-        ProviderKind::Spotify => play_spotify(&snap, shuffle, grit_dir, &snapshot_path).await,
-        ProviderKind::Youtube => play_mpv(&snap, shuffle, grit_dir, &snapshot_path).await,
+        ProviderKind::Spotify => {
+            play_spotify(&snap, shuffle, grit_dir, &snapshot_path, start_index).await
+        }
+        ProviderKind::Youtube => {
+            play_mpv(&snap, shuffle, grit_dir, &snapshot_path, start_index).await
+        }
     }
 }
 
@@ -31,6 +42,7 @@ async fn play_spotify(
     shuffle: bool,
     grit_dir: &Path,
     snapshot_path: &Path,
+    start_index: usize,
 ) -> Result<()> {
     let token = credentials::load(grit_dir, ProviderKind::Spotify)?
         .context("No Spotify credentials. Run 'grit auth spotify' first.")?;
@@ -49,7 +61,7 @@ async fn play_spotify(
         .collect();
 
     player.set_shuffle(shuffle).await?;
-    player.play(uris, 0).await?;
+    player.play(uris, start_index).await?;
 
     let mut app = App::new(
         snap.name.clone(),
@@ -57,6 +69,8 @@ async fn play_spotify(
         PlayerBackend::Spotify,
     );
     app.shuffle = shuffle;
+    app.current_index = start_index;
+    app.selected_index = start_index;
 
     let mut tui = Tui::new()?;
     let mut poll_counter = 0u8;
@@ -341,6 +355,7 @@ async fn play_spotify(
 
     tui.restore()?;
     let _ = player.pause().await;
+    let _ = working_playlist::save_last_track(grit_dir, app.current_index);
     Ok(())
 }
 
@@ -349,6 +364,7 @@ async fn play_mpv(
     shuffle: bool,
     grit_dir: &Path,
     snapshot_path: &Path,
+    start_index: usize,
 ) -> Result<()> {
     use crate::cli::commands::utils::create_provider;
 
@@ -359,12 +375,16 @@ async fn play_mpv(
         queue.toggle_shuffle();
     }
 
+    queue.jump_to(start_index);
+
     let mut player = MpvPlayer::spawn().await?;
     player.observe_eof_reached().await?;
 
     let mut app = App::new(snap.name.clone(), snap.tracks.clone(), PlayerBackend::Mpv);
     app.shuffle = shuffle;
     app.loading = true;
+    app.current_index = start_index;
+    app.selected_index = start_index;
     let mut skip_position = 0u8;
     let mut last_seek = std::time::Instant::now();
     let mut last_modified = std::fs::metadata(snapshot_path)
@@ -744,5 +764,6 @@ async fn play_mpv(
 
     tui.restore()?;
     player.quit().await?;
+    let _ = working_playlist::save_last_track(grit_dir, app.current_index);
     Ok(())
 }
