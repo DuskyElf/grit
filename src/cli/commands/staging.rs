@@ -171,7 +171,7 @@ pub async fn search(
         // Prompt based on mode
         if add_mode {
             if has_more {
-                print!("Add [1,2,..] / [Enter] more / 'q' quit: ");
+                print!("Add [1,2,..] / 'm' more / 'q' quit: ");
             } else {
                 print!("Add tracks [1,2,3...] or 'q' to quit: ");
             }
@@ -190,11 +190,20 @@ pub async fn search(
             break;
         }
 
-        if input.is_empty() {
-            if has_more {
-                continue; // Show more results
-            } else {
-                break; // No more results, exit
+        // Handle "show more" - 'm' in add mode, Enter in normal mode
+        if add_mode {
+            if input.eq_ignore_ascii_case("m") && has_more {
+                continue;
+            }
+            if input.is_empty() {
+                break;
+            }
+        } else {
+            if input.is_empty() && has_more {
+                continue;
+            }
+            if input.is_empty() {
+                break;
             }
         }
 
@@ -239,6 +248,9 @@ pub async fn search(
                     println!("  Staged: {} - {}", track.name, track.artists.join(", "));
                     total_added += 1;
                 }
+
+                // Exit after adding tracks
+                break;
             }
         }
     }
