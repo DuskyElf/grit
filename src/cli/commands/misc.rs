@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
-use crate::state::snapshot;
+use crate::state::{snapshot, working_playlist};
 
 pub async fn list(playlist: Option<&str>, grit_dir: &Path) -> Result<()> {
     let playlist_id = playlist.context("Playlist required (use --playlist)")?;
@@ -177,6 +177,30 @@ pub async fn playlists(query: Option<&str>, grit_dir: &Path) -> Result<()> {
         }
         println!();
     }
+
+    Ok(())
+}
+
+pub async fn switch(playlist_id: &str, grit_dir: &Path) -> Result<()> {
+    let current = working_playlist::load(grit_dir).ok();
+
+    if let Some(ref curr) = current {
+        if curr == playlist_id {
+            println!("Working playlist is already set to {}", playlist_id);
+            return Ok(());
+        }
+    }
+
+    let snapshot_path = snapshot::snapshot_path(grit_dir, playlist_id);
+    if !snapshot_path.exists() {
+        bail!(
+            "Playlist {} is not initialized. Run 'grit init' first.",
+            playlist_id
+        );
+    }
+
+    working_playlist::save(grit_dir, playlist_id)?;
+    println!("Set working playlist to {}", playlist_id);
 
     Ok(())
 }

@@ -1,5 +1,7 @@
 use crate::provider::{Provider, ProviderKind, SpotifyProvider, YoutubeProvider};
-use crate::state::{clear_staged, credentials, snapshot, JournalEntry, Operation};
+use crate::state::{
+    clear_staged, credentials, snapshot, working_playlist, JournalEntry, Operation,
+};
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -94,6 +96,9 @@ pub async fn run(provider: ProviderKind, playlist: &str, grit_dir: &Path) -> Res
     println!("\nPlaylist initialized!");
     println!("  Snapshot: {:?}", snapshot_path);
     println!("  Journal: {:?}", journal_path);
+
+    // Set as working playlist
+    working_playlist::save(&grit_dir, &playlist_id)?;
 
     Ok(())
 }
