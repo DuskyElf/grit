@@ -112,14 +112,14 @@ impl SpotifyPlayer {
         }
     }
 
-    /// Check if token is expired (with 60 second buffer)
+    /// Check if token is expired (with 5 minute buffer for safe refresh)
     fn is_token_expired(token: &OAuthToken) -> bool {
         if let Some(expires_at) = token.expires_at {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
-            return now >= expires_at.saturating_sub(60);
+            return now >= expires_at.saturating_sub(300);
         }
         false
     }
