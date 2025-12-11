@@ -109,6 +109,9 @@ async fn main() -> anyhow::Result<()> {
         Commands::Switch { playlist } => {
             cli::commands::misc::switch(&playlist, &grit_dir).await?;
         }
+        Commands::Curr => {
+            cli::commands::misc::curr(&grit_dir).await?;
+        }
         Commands::Revert { hash, playlist } => {
             let playlist = resolve_playlist(playlist, cli.playlist, &grit_dir)?;
             cli::commands::vcs::revert(hash.as_deref(), Some(&playlist), &grit_dir).await?;

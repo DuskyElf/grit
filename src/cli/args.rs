@@ -200,6 +200,9 @@ pub enum Commands {
         playlist: String,
     },
 
+    /// Show current working playlist info
+    Curr,
+
     /// Revert playlist to a previous commit
     Revert {
         #[arg(help = "Commit hash (defaults to previous commit)")]

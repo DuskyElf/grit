@@ -204,3 +204,26 @@ pub async fn switch(playlist_id: &str, grit_dir: &Path) -> Result<()> {
 
     Ok(())
 }
+
+pub async fn curr(grit_dir: &Path) -> Result<()> {
+    let playlist_id = working_playlist::load(grit_dir)
+        .context("No working playlist set. Use 'grit init' or 'grit switch' to set one.")?;
+
+    let snapshot_path = snapshot::snapshot_path(grit_dir, &playlist_id);
+    if !snapshot_path.exists() {
+        bail!(
+            "Working playlist '{}' not found. It may have been deleted.",
+            playlist_id
+        );
+    }
+
+    let snap = snapshot::load(&snapshot_path)?;
+
+    println!("\nCurrent working playlist:\n");
+    println!("  Name:     {}", snap.name);
+    println!("  ID:       {}", snap.id);
+    println!("  Provider: {:?}", snap.provider);
+    println!("  Tracks:   {}", snap.tracks.len());
+
+    Ok(())
+}
