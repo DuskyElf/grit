@@ -325,42 +325,61 @@ impl Provider for SpotifyProvider {
         let token = self.get_token().await?;
 
         // Step 1: Remove tracks that shouldn't be there
-        for change in &patch.changes {
-            if let TrackChange::Removed { track, .. } = change {
-                let uri = format!("spotify:track:{}", track.id);
-                let body = serde_json::json!({
-                    "tracks": [{"uri": uri}]
-                });
+        // Batch removals - Spotify allows up to 100 tracks per request
+        let tracks_to_remove: Vec<serde_json::Value> = patch
+            .changes
+            .iter()
+            .filter_map(|change| {
+                if let TrackChange::Removed { track, .. } = change {
+                    Some(serde_json::json!({"uri": format!("spotify:track:{}", track.id)}))
+                } else {
+                    None
+                }
+            })
+            .collect();
 
-                let url = format!("{}/playlists/{}/tracks", API_BASE, playlist_id);
+        for chunk in tracks_to_remove.chunks(100) {
+            let body = serde_json::json!({
+                "tracks": chunk
+            });
 
-                self.http
-                    .delete(&url)
-                    .header("Authorization", format!("Bearer {}", token))
-                    .json(&body)
-                    .send()
-                    .await?
-                    .error_for_status()?;
-            }
+            let url = format!("{}/playlists/{}/tracks", API_BASE, playlist_id);
+
+            self.http
+                .delete(&url)
+                .header("Authorization", format!("Bearer {}", token))
+                .json(&body)
+                .send()
+                .await?
+                .error_for_status()?;
         }
 
         // Step 2: Add new tracks to the END (we'll reorder later)
-        for change in &patch.changes {
-            if let TrackChange::Added { track, .. } = change {
-                let uri = format!("spotify:track:{}", track.id);
-                let body = serde_json::json!({
-                    "uris": [uri]
-                    // No position - adds to end
-                });
+        // Batch additions - Spotify allows up to 100 tracks per request
+        let uris_to_add: Vec<String> = patch
+            .changes
+            .iter()
+            .filter_map(|change| {
+                if let TrackChange::Added { track, .. } = change {
+                    Some(format!("spotify:track:{}", track.id))
+                } else {
+                    None
+                }
+            })
+            .collect();
 
-                self.http
-                    .post(format!("{}/playlists/{}/tracks", API_BASE, playlist_id))
-                    .header("Authorization", format!("Bearer {}", token))
-                    .json(&body)
-                    .send()
-                    .await?
-                    .error_for_status()?;
-            }
+        for chunk in uris_to_add.chunks(100) {
+            let body = serde_json::json!({
+                "uris": chunk
+            });
+
+            self.http
+                .post(format!("{}/playlists/{}/tracks", API_BASE, playlist_id))
+                .header("Authorization", format!("Bearer {}", token))
+                .json(&body)
+                .send()
+                .await?
+                .error_for_status()?;
         }
 
         // Step 3: Reorder playlist to match desired state
