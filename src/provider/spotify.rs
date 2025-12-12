@@ -82,6 +82,28 @@ struct SpotifySearchTracks {
     items: Vec<SpotifyTrackObject>,
 }
 
+#[derive(Deserialize)]
+struct SpotifyAlbum {
+    id: String,
+    name: String,
+    artists: Vec<SpotifyArtist>,
+    tracks: SpotifyAlbumTracks,
+}
+
+#[derive(Deserialize)]
+struct SpotifyAlbumTracks {
+    items: Vec<SpotifyAlbumTrack>,
+    next: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SpotifyAlbumTrack {
+    id: String,
+    name: String,
+    duration_ms: u64,
+    artists: Vec<SpotifyArtist>,
+}
+
 impl SpotifyTokenResponse {
     fn into_oauth_token(self) -> OAuthToken {
         use std::time::{SystemTime, UNIX_EPOCH};
@@ -206,6 +228,56 @@ impl SpotifyProvider {
             .json()
             .await
             .context("Failed to parse API response")
+    }
+
+    pub async fn fetch_album(&self, album_id: &str) -> Result<PlaylistSnapshot> {
+        let token = self.get_token().await?;
+        let url = format!("{}/albums/{}", API_BASE, album_id);
+
+        let album: SpotifyAlbum = self.api_get(&url, &token).await?;
+
+        let mut all_tracks = Vec::new();
+
+        for track in album.tracks.items {
+            all_tracks.push(Track {
+                id: track.id,
+                name: track.name,
+                artists: track.artists.into_iter().map(|a| a.name).collect(),
+                duration_ms: track.duration_ms,
+                provider: ProviderKind::Spotify,
+                metadata: None,
+            });
+        }
+
+        let mut next_url = album.tracks.next;
+        while let Some(url) = next_url {
+            let page: SpotifyAlbumTracks = self.api_get(&url, &token).await?;
+
+            for track in page.items {
+                all_tracks.push(Track {
+                    id: track.id,
+                    name: track.name,
+                    artists: track.artists.into_iter().map(|a| a.name).collect(),
+                    duration_ms: track.duration_ms,
+                    provider: ProviderKind::Spotify,
+                    metadata: None,
+                });
+            }
+
+            next_url = page.next;
+        }
+
+        let album_artists: Vec<String> = album.artists.into_iter().map(|a| a.name).collect();
+
+        Ok(PlaylistSnapshot {
+            id: album.id,
+            name: album.name,
+            description: Some(format!("Album by {}", album_artists.join(", "))),
+            tracks: all_tracks,
+            provider: ProviderKind::Spotify,
+            snapshot_hash: String::new(),
+            metadata: None,
+        })
     }
 }
 

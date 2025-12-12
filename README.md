@@ -16,7 +16,7 @@ grit play
 ## Features
 
 - **Version Control** - Track playlist changes with git-like commands (init, commit, push, pull, diff, log, switch)
-- **Multi-Provider** - Supports Spotify and YouTube playlists
+- **Multi-Provider** - Supports Spotify and YouTube playlists (including Spotify albums)
 - **TUI Player** - Beautiful terminal interface with progress bar, queue, and controls
 - **Synced Lyrics** - Real-time lyrics display via LRCLIB (works with both Spotify and YouTube)
 - **Staging Area** - Stage changes before committing (add, remove, move tracks)
@@ -93,8 +93,9 @@ YOUTUBE_CLIENT_SECRET=your_client_secret
 grit auth spotify
 grit auth youtube
 
-# 2. Start tracking a playlist
+# 2. Start tracking a playlist (or album)
 grit init https://open.spotify.com/playlist/37i9dqef1DX...
+grit init https://open.spotify.com/album/4LH4d3cOWNNsVw41Gqt2kv
 grit init https://youtube.com/playlist?list=PL...
 
 # 3. Play your music
@@ -117,7 +118,7 @@ grit play -l 37i9dqef1DX...
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `grit init <url>` | `i` | Start tracking a playlist |
+| `grit init <url>` | `i` | Start tracking a playlist or album |
 | `grit playlists [query]` | | List all tracked playlists |
 | `grit switch <id>` | | Switch working playlist |
 | `grit curr` | | Show current working playlist info |
